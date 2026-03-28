@@ -87,45 +87,50 @@ All code, comments, commits, PRs, issues, and documentation are in **English**.
 
 **ALL work MUST follow this process. No exceptions. No shortcuts.**
 
-### Roles
+<roles>
+- Coordinator (main Claude session): plans work, creates issues, assigns tasks, reviews progress
+- Developer (developer agent): implements features, writes code, pushes branches
+- Reviewer (reviewer agent): reviews PRs for quality, security, patterns compliance
+- QA (qa agent): runs tests, validates acceptance criteria, reports bugs
+</roles>
 
-- **Coordinator** (main Claude session): plans work, creates issues, assigns tasks, reviews progress
-- **Developer** (`developer` agent): implements features, writes code, creates PRs
-- **Reviewer** (`reviewer` agent): reviews PRs for quality, security, patterns compliance
-- **QA** (`qa` agent): writes and runs tests, validates acceptance criteria, reports bugs
+<process>
+1. DESIGN SPEC — Every feature starts with a written spec in docs/superpowers/specs/
+2. GITHUB ISSUE — Spec is broken into GitHub Issues with acceptance criteria
+3. BRANCH — Developer creates feature/issue-name from develop
+4. IMPLEMENT — Developer writes code + tests
+5. PR — Coordinator opens PR to develop, references issue
+6. REVIEW — Reviewer agent reviews the PR
+7. QA — QA agent validates acceptance criteria
+8. MERGE — Squash merge to develop (ONLY after both Review AND QA pass)
+9. RELEASE — When milestone is complete: release branch to main, tag
+</process>
 
-### The Process (strictly enforced)
+<rules>
+- No code without an issue. Every line of code traces back to a GitHub Issue.
+- No issue without a spec. Every issue traces back to a design spec.
+- No merge without review. Every PR is reviewed by the Reviewer agent.
+- No merge without QA. EVERY SINGLE PR MUST PASS QA BEFORE MERGE. NO EXCEPTIONS.
+- No direct commits to develop or main. All changes go through PRs.
+- No PR without tests. Every feature has tests. Every bug fix has a regression test.
+- Issues use labels: feature, bug, chore, docs, blocked, mvp.
+- Issues have acceptance criteria written as checkboxes in the issue body.
+</rules>
 
-```
-1. DESIGN SPEC    — Every feature starts with a written spec in docs/superpowers/specs/
-2. GITHUB ISSUE   — Spec is broken into GitHub Issues with acceptance criteria
-3. BRANCH         — Developer creates feature/<issue>-<name> from develop
-4. IMPLEMENT      — Developer writes code + tests
-5. PR             — Developer opens PR to develop, references issue
-6. REVIEW         — Reviewer agent reviews the PR
-7. QA             — QA agent validates acceptance criteria
-8. MERGE          — Squash merge to develop
-9. RELEASE        — When milestone is complete: release branch → main → tag
-```
+<what_coordinator_does>
+- Plans work, creates GitHub issues, assigns to developer agents
+- Creates PRs after developer pushes branch
+- Dispatches reviewer and QA agents (can run in parallel)
+- Merges PRs ONLY after both reviewer AND QA approve
+- Manages release cuts from develop to main
+</what_coordinator_does>
 
-### Rules That Cannot Be Broken
-
-- **No code without an issue.** Every line of code traces back to a GitHub Issue.
-- **No issue without a spec.** Every issue traces back to a design spec.
-- **No merge without review.** Every PR is reviewed by the Reviewer agent.
-- **No merge without QA.** Every PR is validated by the QA agent. **THIS IS NOT OPTIONAL. EVERY SINGLE PR MUST PASS QA BEFORE MERGE. NO EXCEPTIONS.**
-- **No direct commits to `develop` or `main`.** All changes go through PRs.
-- **No PR without tests.** Every feature has tests. Every bug fix has a regression test.
-- **Issues use labels:** `feature`, `bug`, `chore`, `docs`, `blocked`, `mvp`
-- **Issues have acceptance criteria.** Written as checkboxes in the issue body.
-
-### Coordinator Enforcement Rules
-
-The coordinator (main Claude session) MUST:
-- **Never write code directly.** All implementation is delegated to the Developer agent using worktrees.
-- **Never merge a PR without QA passing.** The merge sequence is always: Reviewer approves → QA validates → Coordinator merges. Skipping QA is a process violation.
-- **Launch QA in parallel with Review when possible.** Both must pass before merge, but they can run concurrently.
-- **Always use context7 for Fyso work.** Before any Fyso-related agent task, include instructions to query `mcp__plugin_fyso_context7` for up-to-date documentation.
+<what_coordinator_does_not_do>
+- Never writes code directly. All implementation is delegated to Developer agents using worktrees.
+- Never merges a PR without QA passing. The sequence is ALWAYS: Review + QA then Merge.
+- Never skips the QA step. This is a hard rule with zero tolerance.
+- Never uses Fyso tools without first querying context7 for up-to-date documentation.
+</what_coordinator_does_not_do>
 
 ### Issue Template
 
