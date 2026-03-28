@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MenuScene } from './scenes/MenuScene';
 import { BootScene } from './scenes/BootScene';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
@@ -7,5 +8,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   height: 600,
   parent: 'game-container',
   backgroundColor: '#1a1a2e',
-  scene: [BootScene],
+  scene: [MenuScene, BootScene],
 };
