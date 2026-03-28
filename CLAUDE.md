@@ -4,47 +4,63 @@ AI-powered point-and-click adventure engine inspired by LucasArts classics.
 
 ## Project Overview
 
-VerbEngine combines **Ink** (narrative scripting DSL) + **Phaser 3** (2D game engine) + **LLM generation** (Python backend) to create and play graphic adventures from text prompts.
+VerbEngine combines **Ink** (narrative scripting DSL) + **Phaser 3** (2D game engine) + **Fyso** (backend: persistence, API, AI) to create and play graphic adventures from text prompts.
 
 ## Architecture
 
 ```
-[User Prompt] → [Python Backend + LLM] → [Ink DSL + Scene Metadata]
-                                              ↓
-                              [Phaser 3 Web Player] → [Playable Adventure]
+[User Prompt] → [Fyso Backend (AI Rule)] → [Ink DSL + Scene Metadata]
+                                                  ↓
+                                  [Phaser 3 SPA Player] → [Playable Adventure]
 ```
 
-- **Frontend**: Phaser 3 (TypeScript) — point-and-click player with simplified UI (left/right click)
-- **Backend**: Python FastAPI — orchestrates LLM to generate Ink scripts + scene definitions
-- **DSL**: Ink (inkle) — narrative scripting with custom extensions for scene metadata
-- **Art style**: AI-generated pixel art, 320x200 aesthetic
+- **Frontend**: Phaser 3 (TypeScript) — SPA, no SSR. Point-and-click player with simplified UI
+- **Backend**: Fyso — entities, channels (API), AI rules for LLM generation
+- **DSL**: Ink (inkle) — narrative scripting with scene metadata JSON
+- **Art style**: AI-generated pixel art, 320x200 aesthetic (v0.2.0; MVP uses color placeholders)
 
 ## Tech Stack
 
-- Frontend: TypeScript, Phaser 3, Vite
-- Backend: Python 3.12+, FastAPI, inkjs (Ink runtime for JS)
-- AI: Anthropic Claude API (or OpenAI compatible)
-- Package managers: pnpm (frontend), uv (backend)
+- **Language**: TypeScript only (no Python, no server-side code)
+- **Game engine**: Phaser 3
+- **Ink runtime**: inkjs (browser)
+- **Build tool**: Vite
+- **Backend**: Fyso (entities + channels + AI rules)
+- **Package manager**: pnpm
+- **Hosting**: Static (GitHub Pages / Vercel / Netlify / Cloudflare Pages)
 
 ## Repository Structure
 
 ```
 verbengine/
-├── frontend/          # Phaser 3 web player (TypeScript)
-├── backend/           # FastAPI server + LLM orchestration (Python)
-├── dsl/               # Ink DSL extensions, examples, and schema
-├── docs/              # Design specs and documentation
+├── src/                   # Phaser 3 SPA (TypeScript)
+│   ├── main.ts
+│   ├── scenes/
+│   ├── engine/
+│   ├── api/               # Fyso API client
+│   └── types/
+├── dsl/                   # Ink DSL examples and schema
+│   └── examples/
+├── docs/                  # Design specs and documentation
 │   └── superpowers/
-│       └── specs/     # Design documents
-└── .claude/
-    └── agents/        # Subagent definitions
+│       └── specs/
+├── .claude/
+│   └── agents/            # Subagent definitions
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── CLAUDE.md
+└── LICENSE
 ```
+
+**There is no `backend/` directory.** Fyso is the backend, configured externally.
 
 ## Git Workflow
 
 ### Branches
 - `main` — stable releases only. Tagged with semver (v0.1.0, v0.2.0...)
-- `develop` — integration branch. All feature PRs target here.
+- `develop` — integration branch. All feature PRs target here
 - `feature/<issue-number>-<short-name>` — feature branches from develop
 - `fix/<issue-number>-<short-name>` — bugfix branches from develop
 - `release/<version>` — release prep branches from develop, merged to main
@@ -140,10 +156,10 @@ Brief description. Closes #<issue-number>
 ## Development Guidelines
 
 ### MVP Scope (v0.1.0)
-- Minimal Ink DSL for adventures (scenes, hotspots, dialogue, inventory, exits)
-- Phaser web player: render scene, click hotspots, dialogues, basic inventory, navigate scenes
-- Backend endpoint: prompt → generated Ink DSL
-- Placeholder images (colored rectangles) — AI art generation is v0.2.0
+- Ink DSL for adventures (scenes, hotspots, dialogue, inventory, exits)
+- Phaser SPA player: render scene, click hotspots, dialogues, basic inventory, navigate scenes
+- Fyso backend: Adventure entity, channel API, AI rule for generation
+- Placeholder visuals (colored rectangles) — AI art generation is v0.2.0
 
 ### NOT in MVP
 - AI image generation
@@ -156,13 +172,13 @@ Brief description. Closes #<issue-number>
 
 ### Code Style
 - TypeScript: strict mode, no `any`, prefer interfaces over types
-- Python: type hints, ruff for linting, pytest for tests
 - Keep files focused and small — one responsibility per file
 - No premature abstractions — three similar lines > one premature helper
 - Tests for public APIs and game logic, not for glue code
+- Vitest for testing
 
 ### Dependencies
 - Minimize external dependencies
 - Prefer well-maintained, MIT/Apache licensed packages
-- Frontend: Phaser 3, inkjs — no UI framework needed
-- Backend: FastAPI, uvicorn, anthropic SDK
+- Core: Phaser 3, inkjs — no UI framework needed
+- No server-side dependencies — Fyso handles all backend concerns

@@ -7,66 +7,63 @@ VerbEngine is an open-source, AI-powered point-and-click adventure engine inspir
 The system combines three pillars:
 1. **Ink DSL** — narrative scripting language for defining adventures
 2. **Phaser 3 Web Player** — browser-based point-and-click gameplay
-3. **Python Backend + LLM** — generates Ink scripts and scene metadata from prompts
+3. **Fyso Backend** — stores adventures, exposes API, orchestrates LLM generation
 
 ## Architecture
 
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  User Prompt │────▶│  Python Backend   │────▶│  Ink DSL +      │
-│  (text)      │     │  (FastAPI + LLM)  │     │  Scene Metadata │
+│  User Prompt │────▶│  Fyso Backend     │────▶│  Ink DSL +      │
+│  (text)      │     │  (Entities + AI)  │     │  Scene Metadata │
 └─────────────┘     └──────────────────┘     └────────┬────────┘
                                                        │
                                                        ▼
                                               ┌─────────────────┐
                                               │  Phaser 3 Player │
-                                              │  (Web Browser)   │
+                                              │  (SPA, no SSR)   │
                                               └─────────────────┘
 ```
 
 ### Components
 
-#### 1. Backend (Python FastAPI)
+#### 1. Backend (Fyso)
 
-**Responsibilities:**
-- Receive user prompt via REST API
-- Construct LLM prompt with adventure generation instructions
-- Parse LLM response into Ink script + scene metadata JSON
-- Validate generated output
-- Serve the generated adventure to the frontend
+Fyso replaces a custom Python backend entirely. No server to deploy or maintain.
 
-**Endpoints (MVP):**
+**Fyso Entity: `Adventure`**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/adventures` | Generate adventure from prompt |
-| GET | `/api/adventures/{id}` | Get generated adventure (Ink + metadata) |
-| GET | `/health` | Health check |
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | uuid (auto) | Unique adventure ID |
+| `title` | text | Adventure title |
+| `prompt` | text | Original user prompt |
+| `scenes_count` | number | Requested number of scenes |
+| `ink_script` | text (long) | Generated Ink script |
+| `scene_metadata` | json | Scene layout metadata for Phaser |
+| `status` | enum | `generating`, `ready`, `error` |
+| `created_at` | datetime (auto) | Creation timestamp |
 
-**POST /api/adventures request:**
-```json
-{
-  "prompt": "A pirate adventure in the Caribbean with 3 scenes",
-  "scenes_count": 3
-}
-```
+**Fyso Channel (API):**
 
-**POST /api/adventures response:**
-```json
-{
-  "id": "uuid",
-  "title": "The Curse of Blackbeard's Gold",
-  "ink_script": "...",
-  "scenes": {
-    "beach": {
-      "description": "A sandy beach with palm trees and a wrecked ship",
-      "background_color": "#c2b280",
-      "hotspots": [...],
-      "exits": [...]
-    }
-  }
-}
-```
+| Operation | Description |
+|-----------|-------------|
+| `create_adventure` | Receive prompt, trigger AI generation, store result |
+| `get_adventure` | Return adventure by ID (ink_script + scene_metadata) |
+| `list_adventures` | List all generated adventures |
+
+**Fyso AI Rule:**
+- Triggered on `create_adventure`
+- Sets `status = "generating"`
+- Sends LLM prompt with adventure generation instructions
+- Parses response into `ink_script` + `scene_metadata`
+- Validates output structure
+- Sets `status = "ready"` (or `"error"` on failure)
+
+**Why Fyso:**
+- No Python, no server, no deployment — Fyso handles persistence, API, and AI
+- Frontend is a pure SPA that talks to Fyso's API
+- Single language across the project (TypeScript only)
+- Built-in persistence — no in-memory hacks
 
 #### 2. Ink DSL (Adventure Definition)
 
@@ -207,10 +204,12 @@ A small fishing village. An old sailor sits on a barrel, muttering to himself.
 - They reference each other via `ink_target` links
 - Each can be edited independently
 
-#### 3. Frontend (Phaser 3 Web Player)
+#### 3. Frontend (Phaser 3 SPA)
+
+**Pure SPA — no SSR, no server-side rendering.** Static files served from any CDN or static host.
 
 **Responsibilities:**
-- Load adventure (Ink script + scene metadata)
+- Load adventure from Fyso API (Ink script + scene metadata)
 - Render current scene: background color, hotspot zones, character markers, exit indicators
 - Handle user interaction: left-click to interact, right-click to look
 - Display dialogue/text in a bottom panel (LucasArts style)
@@ -261,58 +260,53 @@ A small fishing village. An old sailor sits on a barrel, muttering to himself.
 - When Ink presents choices: show them as clickable options in the panel
 - Track Ink variables for inventory state and gate conditions
 
+**Hosting:**
+- Static build output (Vite → `dist/`) deployed to any static host
+- No Node.js runtime needed in production
+- Candidates: GitHub Pages, Vercel (static), Netlify, Cloudflare Pages
+
 ## Data Flow
 
 ```
-1. User types prompt → POST /api/adventures
-2. Backend builds LLM prompt → calls Claude/OpenAI API
+1. User types prompt in SPA → calls Fyso channel `create_adventure`
+2. Fyso AI rule triggers → builds LLM prompt → calls AI API
 3. LLM returns Ink script + scene metadata JSON
-4. Backend validates, stores, returns adventure ID
-5. Frontend fetches adventure by ID
+4. Fyso validates, stores in Adventure entity, sets status = "ready"
+5. Frontend polls/fetches adventure by ID from Fyso
 6. Frontend initializes inkjs with Ink script
 7. Frontend renders first scene from metadata
 8. User clicks hotspot → Ink story advances → UI updates
 9. Loop until Ink reaches -> END
 ```
 
+## Tech Stack
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Frontend | TypeScript, Phaser 3, Vite, inkjs | SPA, no SSR |
+| Backend | Fyso | Entities, channels, AI rules |
+| Package manager | pnpm | Frontend only |
+| Hosting | Static (GitHub Pages / Vercel / Netlify) | No server |
+
 ## File Structure (MVP)
 
 ```
 verbengine/
-├── frontend/
-│   ├── src/
-│   │   ├── main.ts              # Entry point, Phaser config
-│   │   ├── scenes/
-│   │   │   ├── BootScene.ts     # Load adventure data
-│   │   │   └── GameScene.ts     # Main gameplay scene
-│   │   ├── engine/
-│   │   │   ├── InkEngine.ts     # inkjs wrapper
-│   │   │   ├── SceneRenderer.ts # Render hotspots, characters, exits
-│   │   │   ├── DialoguePanel.ts # Text/choices display
-│   │   │   └── InventoryBar.ts  # Inventory UI
-│   │   └── types/
-│   │       └── adventure.ts     # TypeScript interfaces
-│   ├── index.html
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-├── backend/
-│   ├── src/
-│   │   ├── main.py              # FastAPI app
-│   │   ├── routes/
-│   │   │   └── adventures.py    # Adventure endpoints
-│   │   ├── services/
-│   │   │   ├── generator.py     # LLM orchestration
-│   │   │   └── validator.py     # Validate Ink + metadata
-│   │   ├── prompts/
-│   │   │   └── adventure.py     # LLM prompt templates
-│   │   └── models/
-│   │       └── adventure.py     # Pydantic models
-│   ├── tests/
-│   │   ├── test_generator.py
-│   │   └── test_validator.py
-│   ├── pyproject.toml
-│   └── .env.example
+├── src/
+│   ├── main.ts              # Entry point, Phaser config
+│   ├── scenes/
+│   │   ├── BootScene.ts     # Load adventure data from Fyso
+│   │   ├── MenuScene.ts     # Prompt input + adventure list
+│   │   └── GameScene.ts     # Main gameplay scene
+│   ├── engine/
+│   │   ├── InkEngine.ts     # inkjs wrapper
+│   │   ├── SceneRenderer.ts # Render hotspots, characters, exits
+│   │   ├── DialoguePanel.ts # Text/choices display
+│   │   └── InventoryBar.ts  # Inventory UI
+│   ├── api/
+│   │   └── fyso.ts          # Fyso API client
+│   └── types/
+│       └── adventure.ts     # TypeScript interfaces
 ├── dsl/
 │   └── examples/
 │       └── pirate-adventure/
@@ -322,21 +316,24 @@ verbengine/
 │   └── superpowers/
 │       └── specs/
 │           └── 2026-03-28-verbengine-mvp-design.md
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
 ├── CLAUDE.md
 ├── LICENSE
 └── README.md
 ```
 
-## Storage (MVP)
-
-Adventures are stored **in-memory** (Python dict keyed by UUID). No database for MVP. Data is lost on server restart — acceptable for v0.1.0. Persistent storage (SQLite or PostgreSQL) is a v0.2.0 concern.
+Note: no `frontend/` + `backend/` split needed. The entire repo is the SPA. Fyso is configured externally.
 
 ## Error Handling (MVP)
 
-- **LLM fails**: return 503 with retry suggestion
-- **Invalid Ink generated**: backend validates before returning; if invalid, retry LLM once with error context
+- **Fyso AI fails**: frontend shows error state with retry button
+- **Invalid Ink generated**: Fyso AI rule validates before storing; if invalid, retries LLM once with error context, then sets `status = "error"`
 - **Missing ink_target**: frontend shows "Nothing happens." fallback text
 - **Locked exit**: frontend shows "You need [item] to go there." message
+- **Network error**: frontend shows offline/retry state
 
 ## Out of Scope (v0.2.0+)
 
@@ -358,3 +355,4 @@ Adventures are stored **in-memory** (Python dict keyed by UUID). No database for
 4. Inventory system works (pick up items, use items on hotspots)
 5. Adventure has a win condition (reaches -> END)
 6. Entire flow works in a modern browser without installation
+7. No server to deploy — Fyso handles backend, frontend is static SPA
