@@ -1,15 +1,26 @@
 {
   "name": "verbengine",
   "version": "0.1.0",
-  "private": true,
+  "description": "AI-powered point-and-click adventure engine inspired by LucasArts classics",
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.2",
+  "dependencies": {
+    "inkjs": "^2.4.0",
+    "phaser": "^3.90.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3",
+    "vitest": "^4.1.2"
   }
 }
