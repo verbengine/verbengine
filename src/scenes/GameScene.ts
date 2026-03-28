@@ -100,7 +100,8 @@ export class GameLoop {
 
   /**
    * Handle left-click on an exit.
-   * Checks requires condition via InkEngine variables, navigates or shows locked message.
+   * Checks requires condition via InkEngine variables, then advances the Ink
+   * story to the target scene's knot before switching the visual scene.
    */
   handleExit(exit: Exit): void {
     if (exit.requires) {
@@ -118,7 +119,19 @@ export class GameLoop {
       return;
     }
 
-    this.switchScene(targetScene, sceneData);
+    // Find and select the Ink choice that navigates to the target scene.
+    // Match by target_scene name appearing in the choice text.
+    const matchIndex = this.findChoiceByTarget(targetScene, this.currentChoices);
+
+    if (matchIndex !== -1) {
+      this.inkEngine.chooseChoice(matchIndex);
+      const result = this.inkEngine.continueStory();
+      this.syncInventory();
+      this.processOutput(result.text, result.choices);
+    } else {
+      // No matching Ink choice found — switch visually only as fallback
+      this.switchScene(targetScene, sceneData);
+    }
   }
 
   /**

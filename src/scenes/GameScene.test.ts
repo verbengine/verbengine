@@ -268,6 +268,30 @@ describe('GameLoop', () => {
       expect(deps.renderScene).toHaveBeenCalledWith(TEST_SCENE_METADATA.scenes['cave']);
     });
 
+    it('should sync Ink story state so hotspots in the new scene work', () => {
+      // Navigate to cave via exit
+      const exit = TEST_SCENE_METADATA.scenes['start'].exits[0];
+      gameLoop.handleExit(exit);
+
+      deps.showText.mockClear();
+      deps.clearScene.mockClear();
+      deps.renderScene.mockClear();
+
+      // Now in cave — the chest hotspot has ink_target 'use(key)'
+      // which should match the cave knot's 'use(key)' choice.
+      // Without the fix, currentChoices would still belong to 'start' and
+      // this interaction would produce "Nothing happens."
+      const caveChoices = gameLoop.getCurrentChoices();
+      expect(caveChoices.some((c) => c.text.includes('Go back'))).toBe(true);
+      expect(caveChoices.some((c) => c.text.includes('use(key)'))).toBe(true);
+
+      // Verify an interaction with a cave hotspot actually works
+      gameLoop.handleInteraction('Go back');
+      expect(deps.showText).toHaveBeenCalledWith(
+        expect.stringContaining('You are on the beach.')
+      );
+    });
+
     it('should show nothing happens when target scene does not exist', () => {
       const exit = {
         direction: 'west' as const,
