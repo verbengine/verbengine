@@ -67,19 +67,74 @@ Follow conventional commits:
 
 All code, comments, commits, PRs, issues, and documentation are in **English**.
 
-## Agent Workflow
+## Mandatory Development Process
 
-This project uses a coordinator + subagent model:
+**ALL work MUST follow this process. No exceptions. No shortcuts.**
+
+### Roles
 
 - **Coordinator** (main Claude session): plans work, creates issues, assigns tasks, reviews progress
-- **Developer** (`developer`): implements features, writes code, creates PRs
-- **Reviewer** (`reviewer`): reviews PRs for quality, security, patterns compliance
-- **QA** (`qa`): writes and runs tests, validates acceptance criteria, reports bugs
+- **Developer** (`developer` agent): implements features, writes code, creates PRs
+- **Reviewer** (`reviewer` agent): reviews PRs for quality, security, patterns compliance
+- **QA** (`qa` agent): writes and runs tests, validates acceptance criteria, reports bugs
 
-### Task Lifecycle
+### The Process (strictly enforced)
+
 ```
-Coordinator creates Issue → Developer picks up → Developer opens PR →
-Reviewer reviews PR → QA validates → Merge to develop
+1. DESIGN SPEC    — Every feature starts with a written spec in docs/superpowers/specs/
+2. GITHUB ISSUE   — Spec is broken into GitHub Issues with acceptance criteria
+3. BRANCH         — Developer creates feature/<issue>-<name> from develop
+4. IMPLEMENT      — Developer writes code + tests
+5. PR             — Developer opens PR to develop, references issue
+6. REVIEW         — Reviewer agent reviews the PR
+7. QA             — QA agent validates acceptance criteria
+8. MERGE          — Squash merge to develop
+9. RELEASE        — When milestone is complete: release branch → main → tag
+```
+
+### Rules That Cannot Be Broken
+
+- **No code without an issue.** Every line of code traces back to a GitHub Issue.
+- **No issue without a spec.** Every issue traces back to a design spec.
+- **No merge without review.** Every PR is reviewed by the Reviewer agent.
+- **No merge without QA.** Every PR is validated by the QA agent.
+- **No direct commits to `develop` or `main`.** All changes go through PRs.
+- **No PR without tests.** Every feature has tests. Every bug fix has a regression test.
+- **Issues use labels:** `feature`, `bug`, `chore`, `docs`, `blocked`, `mvp`
+- **Issues have acceptance criteria.** Written as checkboxes in the issue body.
+
+### Issue Template
+
+```markdown
+## Description
+What needs to be done and why.
+
+## Acceptance Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+- [ ] Criterion 3
+
+## Spec Reference
+Link to design spec: docs/superpowers/specs/<spec-file>.md
+
+## Notes
+Any technical notes or constraints.
+```
+
+### PR Template
+
+```markdown
+## Summary
+Brief description. Closes #<issue-number>
+
+## Changes
+- Bullet list of changes
+
+## Test Plan
+- How to verify this works
+
+## Screenshots
+(if applicable)
 ```
 
 ## Development Guidelines
