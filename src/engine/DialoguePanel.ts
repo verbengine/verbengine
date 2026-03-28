@@ -65,8 +65,13 @@ export class DialoguePanel {
   showChoices(choices: string[]): void {
     this.clearChoices();
 
+    // Stack choices below narrative text if present
+    const baseY = this.narrativeText
+      ? this.narrativeText.y + this.narrativeText.height + 8
+      : PANEL_Y + TEXT_PADDING_Y;
+
     choices.forEach((choice, index) => {
-      const y = PANEL_Y + TEXT_PADDING_Y + index * CHOICE_LINE_HEIGHT;
+      const y = baseY + index * CHOICE_LINE_HEIGHT;
       const choiceText = this.scene.add.text(
         TEXT_PADDING_X,
         y,

@@ -180,6 +180,27 @@ export class GameLoop {
       }
     }
 
+    // If no scene has been rendered yet (e.g. story lacks # tags),
+    // detect the initial scene by matching choice targets to scene metadata.
+    if (!this.currentSceneName) {
+      const initialScene = this.detectSceneFromChoices(choices);
+      if (initialScene) {
+        const sceneData = this.sceneMetadata.scenes[initialScene];
+        if (sceneData) {
+          this.switchScene(initialScene, sceneData);
+        }
+      } else {
+        // Last resort: render the first scene in metadata
+        const firstSceneName = Object.keys(this.sceneMetadata.scenes)[0];
+        if (firstSceneName) {
+          const sceneData = this.sceneMetadata.scenes[firstSceneName];
+          if (sceneData) {
+            this.switchScene(firstSceneName, sceneData);
+          }
+        }
+      }
+    }
+
     if (text) {
       this.showTextFn(text);
     }
@@ -203,6 +224,50 @@ export class GameLoop {
       }
     }
     return null;
+  }
+
+  /**
+   * Detect scene name by matching available choices against scene metadata.
+   * If choices reference hotspot ink_targets or exit target_scenes for a
+   * specific scene, that scene is likely the current one.
+   */
+  private detectSceneFromChoices(
+    choices: Array<{ index: number; text: string }>
+  ): string | null {
+    const choiceTexts = choices.map((c) => c.text.toLowerCase());
+    let bestScene: string | null = null;
+    let bestScore = 0;
+
+    for (const [sceneName, sceneData] of Object.entries(
+      this.sceneMetadata.scenes
+    )) {
+      let score = 0;
+
+      for (const hotspot of sceneData.hotspots) {
+        const target = hotspot.ink_target.replace(/_/g, ' ').toLowerCase();
+        if (
+          choiceTexts.some(
+            (ct) => ct.includes(target) || ct.includes(hotspot.ink_target.toLowerCase())
+          )
+        ) {
+          score += 1;
+        }
+      }
+
+      for (const exit of sceneData.exits) {
+        const targetScene = exit.target_scene.toLowerCase();
+        if (choiceTexts.some((ct) => ct.includes(targetScene))) {
+          score += 1;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestScene = sceneName;
+      }
+    }
+
+    return bestScene;
   }
 
   /**
@@ -318,16 +383,30 @@ export class GameLoop {
  */
 export class GameScene extends Phaser.Scene {
   private gameLoop: GameLoop | null = null;
+  private adventureData: Adventure | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
   }
 
   init(data: GameSceneData): void {
-    const { adventure } = data;
+    this.adventureData = data.adventure;
+  }
+
+  create(): void {
+    const adventure = this.adventureData;
+    if (!adventure) {
+      return;
+    }
 
     const inkEngine = new InkEngine();
     inkEngine.loadStory(adventure.ink_script);
+
+    // Parse scene_metadata if it arrives as a string (e.g. from Fyso API)
+    const sceneMetadata: SceneMetadata =
+      typeof adventure.scene_metadata === 'string'
+        ? (JSON.parse(adventure.scene_metadata) as SceneMetadata)
+        : adventure.scene_metadata;
 
     const sceneRenderer = new SceneRenderer(this);
     const dialoguePanel = new DialoguePanel(this);
@@ -338,7 +417,7 @@ export class GameScene extends Phaser.Scene {
 
     this.gameLoop = new GameLoop({
       inkEngine,
-      sceneMetadata: adventure.scene_metadata,
+      sceneMetadata,
       renderScene: (sceneData) => sceneRenderer.renderScene(sceneData),
       clearScene: () => sceneRenderer.clearScene(),
       showText: (text) => dialoguePanel.showText(text),
@@ -374,9 +453,7 @@ export class GameScene extends Phaser.Scene {
     dialoguePanel.onChoiceSelected((index) => {
       this.gameLoop?.handleChoiceSelected(index);
     });
-  }
 
-  create(): void {
-    this.gameLoop?.start();
+    this.gameLoop.start();
   }
 }
