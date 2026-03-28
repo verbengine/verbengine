@@ -388,7 +388,7 @@ describe("MenuScene", () => {
       );
 
       expect(configSource).toContain("MenuScene");
-      expect(configSource).toContain("scene: [MenuScene, BootScene]");
+      expect(configSource).toContain("scene: [MenuScene, BootScene, GameScene]");
     });
   });
 });
