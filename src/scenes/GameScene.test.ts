@@ -248,7 +248,7 @@ describe('GameLoop', () => {
       };
       gameLoop.handleExit(exit);
 
-      expect(deps.showText).toHaveBeenCalledWith('The way east is blocked.');
+      expect(deps.showText).toHaveBeenCalledWith('You need key to go there.');
       expect(deps.renderScene).not.toHaveBeenCalled();
     });
 

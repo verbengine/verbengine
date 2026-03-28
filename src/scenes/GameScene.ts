@@ -107,7 +107,8 @@ export class GameLoop {
     if (exit.requires) {
       const value = this.inkEngine.getVariable(exit.requires);
       if (!value) {
-        this.showTextFn(`The way ${exit.direction} is blocked.`);
+        const itemName = exit.requires.replace(/^has_/, '');
+        this.showTextFn(`You need ${itemName} to go there.`);
         return;
       }
     }
@@ -192,17 +193,78 @@ export class GameLoop {
   }
 
   /**
-   * Detect scene name from Ink tags.
-   * Convention: a tag matching a key in sceneMetadata.scenes indicates the current scene.
+   * Detect scene name from Ink tags, or as a fallback, from the available
+   * choices matching a scene's hotspot/character ink_targets or exit targets.
    */
   private detectSceneFromTags(): string | null {
+    // Primary: match by Ink tags
     const tags = this.inkEngine.getCurrentTags();
     for (const tag of tags) {
       if (this.sceneMetadata.scenes[tag]) {
         return tag;
       }
     }
-    return null;
+
+    // Fallback: match by choice text containing scene-specific ink_targets
+    return this.detectSceneFromChoices();
+  }
+
+  /**
+   * Detect the current scene by matching available choices against
+   * hotspot/character ink_targets and exit target_scenes defined in metadata.
+   * Returns the scene with the most matches, or null if none found.
+   */
+  private detectSceneFromChoices(): string | null {
+    const choiceTexts = this.currentChoices.map((c) => c.text.toLowerCase());
+    if (choiceTexts.length === 0) return null;
+
+    let bestScene: string | null = null;
+    let bestScore = 0;
+
+    for (const [sceneName, sceneData] of Object.entries(this.sceneMetadata.scenes)) {
+      let score = 0;
+
+      for (const hotspot of sceneData.hotspots) {
+        const target = hotspot.ink_target.replace(/_/g, ' ').toLowerCase();
+        const label = hotspot.label.toLowerCase();
+        const labelWords = label.split(/\s+/).filter((w) => w.length >= 4);
+        if (choiceTexts.some((ct) =>
+          ct.includes(target) ||
+          ct.includes(hotspot.ink_target.toLowerCase()) ||
+          ct.includes(label) ||
+          labelWords.some((w) => ct.includes(w))
+        )) {
+          score++;
+        }
+      }
+
+      for (const character of sceneData.characters) {
+        const target = character.ink_target.replace(/_/g, ' ').toLowerCase();
+        const label = character.label.toLowerCase();
+        const labelWords = label.split(/\s+/).filter((w) => w.length >= 4);
+        if (choiceTexts.some((ct) =>
+          ct.includes(target) ||
+          ct.includes(character.ink_target.toLowerCase()) ||
+          ct.includes(label) ||
+          labelWords.some((w) => ct.includes(w))
+        )) {
+          score++;
+        }
+      }
+
+      for (const exit of sceneData.exits) {
+        if (choiceTexts.some((ct) => ct.includes(exit.target_scene.toLowerCase()))) {
+          score++;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestScene = sceneName;
+      }
+    }
+
+    return bestScene;
   }
 
   /**
@@ -280,6 +342,16 @@ export class GameLoop {
       c.text.toLowerCase().includes(normalized)
     );
     if (normalizedMatch) return normalizedMatch.index;
+
+    // Try matching just the suffix after the scene prefix (e.g. "beach_ship" -> "ship")
+    const underscoreIdx = inkTarget.indexOf('_');
+    if (underscoreIdx !== -1) {
+      const suffix = inkTarget.slice(underscoreIdx + 1).replace(/_/g, ' ').toLowerCase();
+      const suffixMatch = choices.find((c) =>
+        c.text.toLowerCase().includes(suffix)
+      );
+      if (suffixMatch) return suffixMatch.index;
+    }
 
     return -1;
   }

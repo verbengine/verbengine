@@ -1,11 +1,20 @@
 import Phaser from "phaser";
 import { loadAdventure } from "./adventure-loader";
 
+export interface BootSceneData {
+  adventureId?: string;
+}
+
 export class BootScene extends Phaser.Scene {
   private loadingText: Phaser.GameObjects.Text | null = null;
+  private adventureId: string | undefined;
 
   constructor() {
     super({ key: "BootScene" });
+  }
+
+  init(data: BootSceneData): void {
+    this.adventureId = data.adventureId;
   }
 
   create(): void {
@@ -22,7 +31,7 @@ export class BootScene extends Phaser.Scene {
 
   private async boot(): Promise<void> {
     try {
-      const adventure = await loadAdventure();
+      const adventure = await loadAdventure(this.adventureId);
       this.scene.start("GameScene", { adventure });
     } catch (error: unknown) {
       const message =

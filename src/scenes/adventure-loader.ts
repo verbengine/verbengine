@@ -31,14 +31,14 @@ export function loadStaticAdventure(): Adventure {
 }
 
 /**
- * Loads an adventure either from the Fyso API (if URL param present)
- * or falls back to the static pirate adventure.
+ * Loads an adventure either from the Fyso API (if an ID is provided or
+ * present in the URL) or falls back to the static pirate adventure.
  */
-export async function loadAdventure(): Promise<Adventure> {
-  const adventureId = getAdventureIdFromUrl();
+export async function loadAdventure(adventureId?: string): Promise<Adventure> {
+  const id = adventureId ?? getAdventureIdFromUrl();
 
-  if (adventureId) {
-    return getAdventure(adventureId);
+  if (id) {
+    return getAdventure(id);
   }
 
   return loadStaticAdventure();
