@@ -113,11 +113,19 @@ All code, comments, commits, PRs, issues, and documentation are in **English**.
 - **No code without an issue.** Every line of code traces back to a GitHub Issue.
 - **No issue without a spec.** Every issue traces back to a design spec.
 - **No merge without review.** Every PR is reviewed by the Reviewer agent.
-- **No merge without QA.** Every PR is validated by the QA agent.
+- **No merge without QA.** Every PR is validated by the QA agent. **THIS IS NOT OPTIONAL. EVERY SINGLE PR MUST PASS QA BEFORE MERGE. NO EXCEPTIONS.**
 - **No direct commits to `develop` or `main`.** All changes go through PRs.
 - **No PR without tests.** Every feature has tests. Every bug fix has a regression test.
 - **Issues use labels:** `feature`, `bug`, `chore`, `docs`, `blocked`, `mvp`
 - **Issues have acceptance criteria.** Written as checkboxes in the issue body.
+
+### Coordinator Enforcement Rules
+
+The coordinator (main Claude session) MUST:
+- **Never write code directly.** All implementation is delegated to the Developer agent using worktrees.
+- **Never merge a PR without QA passing.** The merge sequence is always: Reviewer approves → QA validates → Coordinator merges. Skipping QA is a process violation.
+- **Launch QA in parallel with Review when possible.** Both must pass before merge, but they can run concurrently.
+- **Always use context7 for Fyso work.** Before any Fyso-related agent task, include instructions to query `mcp__plugin_fyso_context7` for up-to-date documentation.
 
 ### Issue Template
 
