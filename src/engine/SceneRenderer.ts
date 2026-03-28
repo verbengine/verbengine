@@ -113,6 +113,7 @@ export class SceneRenderer {
       CANVAS_HEIGHT,
       hex,
     );
+    bg.setDepth(0);
     this.gameObjects.push(bg);
   }
 
@@ -125,6 +126,7 @@ export class SceneRenderer {
     const rect = this.scene.add.rectangle(x, y, w, h);
     rect.setStrokeStyle(2, HOTSPOT_BORDER_COLOR, HOTSPOT_BORDER_ALPHA);
     rect.setFillStyle(HOTSPOT_BORDER_COLOR, HOTSPOT_FILL_ALPHA);
+    rect.setDepth(10);
     rect.setInteractive({ useHandCursor: true });
 
     rect.on('pointerover', () => {
@@ -150,6 +152,7 @@ export class SceneRenderer {
       color: LABEL_COLOR,
     });
     label.setOrigin(0.5, 1);
+    label.setDepth(11);
 
     this.gameObjects.push(rect, label);
   }
@@ -159,6 +162,7 @@ export class SceneRenderer {
     const y = toCanvasY(character.y);
 
     const circle = this.scene.add.circle(x, y, CHARACTER_RADIUS, CHARACTER_COLOR);
+    circle.setDepth(10);
     circle.setInteractive(
       new Phaser.Geom.Circle(0, 0, CHARACTER_RADIUS),
       Phaser.Geom.Circle.Contains,
@@ -188,6 +192,7 @@ export class SceneRenderer {
       color: LABEL_COLOR,
     });
     label.setOrigin(0.5, 1);
+    label.setDepth(11);
 
     this.gameObjects.push(circle, label);
   }
@@ -204,6 +209,7 @@ export class SceneRenderer {
       fontStyle: 'bold',
     });
     text.setOrigin(0.5, 0.5);
+    text.setDepth(12);
     text.setInteractive({ useHandCursor: true });
 
     text.on('pointerover', () => {

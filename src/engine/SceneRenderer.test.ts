@@ -48,6 +48,7 @@ function createMockGameObject() {
     setInteractive: vi.fn().mockReturnThis(),
     setOrigin: vi.fn().mockReturnThis(),
     setAlpha: vi.fn().mockReturnThis(),
+    setDepth: vi.fn().mockReturnThis(),
     destroy: vi.fn(),
     input: { cursor: '' },
     on: vi.fn((event: string, callback: (...args: unknown[]) => void) => {
