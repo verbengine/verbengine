@@ -1,0 +1,47 @@
+<h2>How should layered animation work?</h2>
+<p class="subtitle">Current system: 7x3 spritesheet grid (walk, type, read x 3 directions). Each layer needs to animate in sync. This is the hardest technical decision.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Stacked Spritesheets</h3>
+      <p>Each layer (hair, torso, legs...) has its own 7x3 spritesheet, same frame layout as today. At runtime, 5 sprites play the same animation in sync, stacked on top of each other.</p>
+      <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem; color: #94a3b8;">
+        <strong>Pros:</strong> Simple rendering, uses existing Phaser animation system<br>
+        <strong>Cons:</strong> Every layer variant needs a full spritesheet (hair_01.png = 7x3 grid = 21 frames)
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Runtime Compositing (Canvas)</h3>
+      <p>Compose all layers into a single spritesheet at character creation time using OffscreenCanvas. Result is one traditional spritesheet per character — identical to current system at runtime.</p>
+      <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem; color: #94a3b8;">
+        <strong>Pros:</strong> Zero runtime overhead after compositing, exact same rendering path as today<br>
+        <strong>Cons:</strong> Compositing step on load, still need aligned spritesheets per layer
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Skeletal / Bone Animation</h3>
+      <p>Each part is a separate static image positioned by bones. Animations move bones, parts follow. Like paper dolls with joints.</p>
+      <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem; color: #94a3b8;">
+        <strong>Pros:</strong> Fewest assets needed, most flexible<br>
+        <strong>Cons:</strong> Doesn't look like pixel art (parts rotate/scale smoothly), needs animation editor, major engine change
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;">
+  <h3 style="color: #a78bfa;">Recommendation: B (Runtime Compositing)</h3>
+  <p style="color: #94a3b8; font-size: 0.9rem;">
+    Keeps the existing animation system untouched. Layers are composed into a single spritesheet once (on character creation or load), then the game runs exactly as it does today. Best balance of flexibility vs. engine complexity.
+  </p>
+</div>

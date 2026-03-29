@@ -15,7 +15,6 @@
   "packageManager": "pnpm@10.30.2",
   "dependencies": {
     "easystarjs": "^0.4.4",
-    "inkjs": "^2.4.0",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

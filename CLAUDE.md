@@ -4,28 +4,24 @@ AI-powered point-and-click adventure engine inspired by LucasArts classics.
 
 ## Project Overview
 
-VerbEngine combines **Ink** (narrative scripting DSL) + **Phaser 3** (2D game engine) + **Fyso** (backend: persistence, API, AI) to create and play graphic adventures from text prompts.
+VerbEngine combines **DSL v2 (.verb files)** (narrative scripting) + **Phaser 3** (2D game engine) to create and play point-and-click graphic adventures.
 
 ## Architecture
 
 ```
-[User Prompt] → [Fyso Backend (AI Rule)] → [Ink DSL + Scene Metadata]
-                                                  ↓
-                                  [Phaser 3 SPA Player] → [Playable Adventure]
+[.verb file (DSL v2)] → [VerbParser] → [AdventureEngine] → [Phaser 3 Isometric Player]
 ```
 
-- **Frontend**: Phaser 3 (TypeScript) — SPA, no SSR. Point-and-click player with simplified UI
-- **Backend**: Fyso — entities, channels (API), AI rules for LLM generation
-- **DSL**: Ink (inkle) — narrative scripting with scene metadata JSON
-- **Art style**: AI-generated pixel art, 320x200 aesthetic (v0.2.0; MVP uses color placeholders)
+- **Frontend**: Phaser 3 (TypeScript) — SPA, no SSR. Isometric point-and-click player
+- **DSL**: VerbEngine DSL v2 (.verb files) — scene definitions, hotspots, dialogue, inventory, exits
+- **Art style**: AI-generated pixel art, isometric tiles (Kenney-style); MVP uses placeholder tiles
 
 ## Tech Stack
 
 - **Language**: TypeScript only (no Python, no server-side code)
 - **Game engine**: Phaser 3
-- **Ink runtime**: inkjs (browser)
+- **DSL**: VerbEngine DSL v2 (.verb files), parsed by VerbParser
 - **Build tool**: Vite
-- **Backend**: Fyso (entities + channels + AI rules)
 - **Package manager**: pnpm
 - **Hosting**: Static (GitHub Pages / Vercel / Netlify / Cloudflare Pages)
 
@@ -37,9 +33,9 @@ verbengine/
 │   ├── main.ts
 │   ├── scenes/
 │   ├── engine/
-│   ├── api/               # Fyso API client
+│   ├── api/               # (reserved for future API clients)
 │   └── types/
-├── dsl/                   # Ink DSL examples and schema
+├── dsl/                   # DSL v2 (.verb) examples
 │   └── examples/
 ├── docs/                  # Design specs and documentation
 │   └── superpowers/
@@ -54,7 +50,7 @@ verbengine/
 └── LICENSE
 ```
 
-**There is no `backend/` directory.** Fyso is the backend, configured externally.
+**There is no `backend/` directory.** VerbEngine is a fully client-side SPA.
 
 ## Git Workflow
 
@@ -169,10 +165,9 @@ Brief description. Closes #<issue-number>
 ## Development Guidelines
 
 ### MVP Scope (v0.1.0)
-- Ink DSL for adventures (scenes, hotspots, dialogue, inventory, exits)
-- Phaser SPA player: render scene, click hotspots, dialogues, basic inventory, navigate scenes
-- Fyso backend: Adventure entity, channel API, AI rule for generation
-- Placeholder visuals (colored rectangles) — AI art generation is v0.2.0
+- DSL v2 (.verb files) for adventures (scenes, hotspots, dialogue, inventory, exits)
+- Phaser SPA player: isometric scene rendering, click hotspots, dialogues, basic inventory, navigate scenes
+- Placeholder visuals (isometric tiles) — AI art generation is v0.2.0
 
 ### NOT in MVP
 - AI image generation
@@ -193,5 +188,5 @@ Brief description. Closes #<issue-number>
 ### Dependencies
 - Minimize external dependencies
 - Prefer well-maintained, MIT/Apache licensed packages
-- Core: Phaser 3, inkjs — no UI framework needed
-- No server-side dependencies — Fyso handles all backend concerns
+- Core: Phaser 3 — no UI framework needed
+- No server-side dependencies — VerbEngine is fully client-side
