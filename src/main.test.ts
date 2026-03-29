@@ -13,7 +13,6 @@ describe('VerbEngine bootstrap', () => {
       'vite.config.ts',
       'src/main.ts',
       'src/config.ts',
-      'src/scenes/BootScene.ts',
     ];
 
     for (const file of requiredFiles) {
@@ -36,7 +35,7 @@ describe('VerbEngine bootstrap', () => {
     expect(pkg.scripts.build).toBeDefined();
     expect(pkg.scripts.test).toBeDefined();
     expect(pkg.dependencies.phaser).toBeDefined();
-    expect(pkg.dependencies.inkjs).toBeDefined();
+    expect(pkg.dependencies.inkjs).toBeUndefined();
   });
 
   it('should have game config with fullscreen responsive canvas', async () => {

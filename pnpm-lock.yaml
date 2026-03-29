@@ -11,9 +11,6 @@ importers:
       easystarjs:
         specifier: ^0.4.4
         version: 0.4.4
-      inkjs:
-        specifier: ^2.4.0
-        version: 2.4.0
       phaser:
         specifier: ^3.90.0
         version: 3.90.0
@@ -331,10 +328,6 @@ packages:
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
-
-  inkjs@2.4.0:
-    resolution: {integrity: sha512-EoPCYESIbMtfI8SqEDZCJwn+A5is0QozMLw250iic1ReJCgZpRKIezWj0VqgRUzAx0f3MmEbsUjY/ILe2815JQ==}
-    hasBin: true
 
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
@@ -890,8 +883,6 @@ snapshots:
       '@exodus/bytes': 1.15.0
     transitivePeerDependencies:
       - '@noble/hashes'
-
-  inkjs@2.4.0: {}
 
   is-potential-custom-element-name@1.0.1: {}
 
