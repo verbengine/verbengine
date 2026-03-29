@@ -37,7 +37,8 @@ const MAP_ROWS = 25;
  * 3 = desk (blocked decoration on floor)
  * 4 = chair (walkable decoration on floor)
  * 5 = bookshelf (blocked decoration on floor)
- * 6 = barrel (blocked decoration on floor)
+ * 6 = plant (blocked decoration on floor)
+ * 7 = coffee machine (blocked decoration on floor)
  *
  * Layout: 4 rooms connected by corridors
  * - Top-left (rows 1-9, cols 1-9): Office with desks/chairs
@@ -70,8 +71,8 @@ const MAP_DATA: number[][] = [
   [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,4,0,0,0,1],
   // Row 10 — horizontal corridor wall with doorways
   [1,1,1,1,1,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,1],
-  // Row 11 — corridor
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 11 — corridor with plants and coffee
+  [1,0,6,0,0,0,0,0,0,0,7,0,0,0,0,0,6,0,0,0,0,0,6,0,1],
   // Row 12 — corridor
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
   // Row 13 — horizontal wall with doorways
@@ -104,15 +105,19 @@ const MAP_DATA: number[][] = [
 const WALKABLE_TILES = [0, 4];
 
 /** Floor texture for walkable cells */
-const FLOOR_KEY = 'tile-floor-office';
+const FLOOR_KEY = 'tile-floor-carpet';
+const FLOOR_WOOD_KEY = 'tile-floor-wood';
 
 /** Decoration texture keys (rendered on top of floor) */
 const DECO_KEY: Record<number, string> = {
   3: 'tile-desk',
-  4: 'tile-chair',
-  5: 'tile-bookshelf',
-  6: 'tile-barrel',
+  5: 'tile-bookshelf-nano',
+  6: 'tile-plant-nano',
+  7: 'tile-coffee-nano',
 };
+
+/** Scale factor for nanobanana-generated tiles (711px wide → SCALED_TILE_W) */
+const NANO_SCALE = SCALED_TILE_W / 711;
 
 const TARGET_COLOR = 0xffff00;
 const BLOCKED_COLOR = 0xff3333;
@@ -134,9 +139,46 @@ const DIR_WEST = 3;
 const SPRITE_COLS = 7;
 const WALK_CYCLE = [0, 1, 2, 1];
 
+/** Wander config */
+const WANDER_RADIUS = 4;
+const WANDER_MIN_PAUSE = 2000; // ms
+const WANDER_MAX_PAUSE = 5000; // ms
+const NPC_MOVE_SPEED = 2; // tiles/sec
+
+/** NPC definitions */
+interface NpcDef {
+  id: string;
+  sprite: string;
+  gridX: number;
+  gridY: number;
+  direction: number;
+  name: string;
+  dialogue: string;
+}
+
+/** Runtime NPC state */
+interface NpcState {
+  def: NpcDef;
+  sprite: Phaser.GameObjects.Sprite;
+  label: Phaser.GameObjects.Text;
+  currentX: number;
+  currentY: number;
+  homeX: number;
+  homeY: number;
+  isMoving: boolean;
+}
+
+const NPCS: NpcDef[] = [
+  { id: 'npc1', sprite: 'char_1', gridX: 4, gridY: 3, direction: DIR_SOUTH, name: 'Ana', dialogue: 'Hey! Welcome to the office. The coffee machine is in the corridor.' },
+  { id: 'npc2', sprite: 'char_2', gridX: 20, gridY: 5, direction: DIR_WEST, name: 'Carlos', dialogue: 'Shhh... I\'m reading. The library is my favorite spot.' },
+  { id: 'npc3', sprite: 'char_3', gridX: 14, gridY: 17, direction: DIR_SOUTH, name: 'Elena', dialogue: 'I\'ve been coding all day. Need more coffee...' },
+];
+
 export class IsoScene extends Phaser.Scene {
   private tileImages: Phaser.GameObjects.Image[][] = [];
   private decorationImages: Phaser.GameObjects.Image[] = [];
+  private npcStates: NpcState[] = [];
+  private dialogueBox: Phaser.GameObjects.Container | null = null;
   private characterSprite!: Phaser.GameObjects.Sprite;
   private targetHighlight!: Phaser.GameObjects.Graphics;
   private hoverHighlight!: Phaser.GameObjects.Graphics;
@@ -160,24 +202,29 @@ export class IsoScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Floor tile (32x16 base)
-    this.load.image(FLOOR_KEY, '/assets/tiles/floor_office.png');
+    // Floor tiles (nanobanana)
+    this.load.image(FLOOR_KEY, '/assets/tiles/floor_carpet.png');
+    this.load.image(FLOOR_WOOD_KEY, '/assets/tiles/floor_wood_nano.png');
 
-    // Wall tiles
-    this.load.image('tile-wall-plain', '/assets/tiles/wall_plain.png');
-    this.load.image('tile-wall-window', '/assets/tiles/wall_window.png');
+    // Wall tiles (nanobanana)
+    this.load.image('tile-wall-plain', '/assets/tiles/wall_nano.png');
+    this.load.image('tile-wall-window', '/assets/tiles/wall_window_nano.png');
 
-    // Decorations
+    // Decorations (nanobanana)
     this.load.image('tile-desk', '/assets/tiles/desk.png');
-    this.load.image('tile-chair', '/assets/tiles/chair.png');
-    this.load.image('tile-bookshelf', '/assets/tiles/bookshelf.png');
-    this.load.image('tile-barrel', '/assets/tiles/barrel.png');
+    this.load.image('tile-laptop', '/assets/tiles/laptop_nano.png');
+    this.load.image('tile-bookshelf-nano', '/assets/tiles/bookshelf_nano.png');
+    this.load.image('tile-plant-nano', '/assets/tiles/plant_nano.png');
+    this.load.image('tile-coffee-nano', '/assets/tiles/coffee_nano.png');
 
-    // Character spritesheet: 7 cols x 3 rows, 16x32 per frame
-    this.load.spritesheet('char_0', '/assets/characters/char_0.png', {
-      frameWidth: CHAR_W,
-      frameHeight: CHAR_H,
-    });
+    // Character spritesheets: 7 cols x 3 rows, 16x32 per frame
+    const charSprites = ['char_0', 'char_1', 'char_2', 'char_3'];
+    for (const sprite of charSprites) {
+      this.load.spritesheet(sprite, `/assets/characters/${sprite}.png`, {
+        frameWidth: CHAR_W,
+        frameHeight: CHAR_H,
+      });
+    }
   }
 
   create(): void {
@@ -187,13 +234,18 @@ export class IsoScene extends Phaser.Scene {
     this.setupPathfinder();
     this.drawMap();
     this.createCharacter();
+    this.createNPCs();
     this.createTargetHighlight();
     this.createHoverHighlight();
     this.setupInput();
     this.setupCamera();
 
-    // Fixed-position UI (ignores camera scroll)
-    this.add
+    // UI Camera — separate camera that ignores zoom/scroll
+    const uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height);
+    uiCam.setScroll(0, 0);
+    uiCam.setZoom(1);
+
+    const backBtn = this.add
       .text(16, 16, '< Back', {
         fontFamily: 'monospace',
         fontSize: '16px',
@@ -208,22 +260,26 @@ export class IsoScene extends Phaser.Scene {
         this.scene.start('MenuScene');
       });
 
-    const titleText = this.add.text(this.scale.width / 2, 16, 'Fyso World Office', {
+    const titleText = this.add.text(this.scale.width / 2, 16, 'VerbEngine — Iso Demo', {
       fontFamily: 'monospace',
       fontSize: '18px',
       color: '#ffffff',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
 
-    const instrText = this.add.text(this.scale.width / 2, 44, 'Click a floor tile to move', {
+    const instrText = this.add.text(this.scale.width / 2, 44, 'Click to move | Scroll to zoom | WASD to pan | C to re-center', {
       fontFamily: 'monospace',
       fontSize: '12px',
       color: '#888888',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
 
-    // Re-center UI text when window resizes
+    // Main camera ignores UI elements, UI camera only shows UI
+    this.cameras.main.ignore([backBtn, titleText, instrText]);
+    uiCam.ignore(this.children.list.filter(child => child !== backBtn && child !== titleText && child !== instrText));
+
     this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       titleText.setX(gameSize.width / 2);
       instrText.setX(gameSize.width / 2);
+      uiCam.setSize(gameSize.width, gameSize.height);
     });
   }
 
@@ -320,21 +376,21 @@ export class IsoScene extends Phaser.Scene {
         if (cellType === 1 || cellType === 2) {
           // Wall tiles — draw floor underneath for seamless ground, then wall on top
           const floorImg = this.add.image(sx, sy, FLOOR_KEY);
-          floorImg.setScale(ZOOM);
+          floorImg.setScale(NANO_SCALE);
           floorImg.setOrigin(0.5, 0);
           floorImg.setDepth(row + col);
           this.tileImages[row][col] = floorImg;
 
-          const wallKey = cellType === 1 ? 'tile-wall-plain' : 'tile-wall-window';
-          const wallImg = this.add.image(sx, sy, wallKey);
-          wallImg.setScale(ZOOM);
-          wallImg.setOrigin(0.5, 0.5);
+          const wallKey = 'tile-wall-plain';
+          const wallImg = this.add.image(sx, sy + SCALED_TILE_H, wallKey);
+          wallImg.setScale(NANO_SCALE);
+          wallImg.setOrigin(0.5, 1.0);
           wallImg.setDepth(row + col + 0.3);
           this.decorationImages.push(wallImg);
         } else {
           // Floor tile (all walkable or decorated cells get floor)
           const floorImg = this.add.image(sx, sy, FLOOR_KEY);
-          floorImg.setScale(ZOOM);
+          floorImg.setScale(NANO_SCALE);
           floorImg.setOrigin(0.5, 0);
           floorImg.setDepth(row + col);
           this.tileImages[row][col] = floorImg;
@@ -353,9 +409,8 @@ export class IsoScene extends Phaser.Scene {
         const sx = Math.round(x);
         const sy = Math.round(y);
 
-        const decoImg = this.add.image(sx, sy, decoKey);
-        decoImg.setScale(ZOOM);
-        // Decorations: origin (0.5, 0.5) shifts up by TILE_H like walls in fyso_world
+        const decoImg = this.add.image(sx, sy + SCALED_TILE_H / 2, decoKey);
+        decoImg.setScale(NANO_SCALE);
         decoImg.setOrigin(0.5, 0.5);
         decoImg.setDepth(row + col + 0.5);
         this.decorationImages.push(decoImg);
@@ -423,6 +478,231 @@ export class IsoScene extends Phaser.Scene {
     return `char-idle-${dirNames[this.charDirection]}`;
   }
 
+  // ── NPCs ──────────────────────────────────────────────────────
+
+  private createNPCs(): void {
+    for (const npc of NPCS) {
+      // Create walk + idle animations for this NPC's sprite
+      const dirs = ['south', 'north', 'east', 'west'];
+      for (let d = 0; d < 4; d++) {
+        const row = d === DIR_NORTH ? 1 : d >= DIR_EAST ? 2 : 0;
+        const walkKey = `${npc.sprite}-walk-${dirs[d]}`;
+        const idleKey = `${npc.sprite}-idle-${dirs[d]}`;
+        if (!this.anims.exists(walkKey)) {
+          this.anims.create({
+            key: walkKey,
+            frames: WALK_CYCLE.map(col => ({ key: npc.sprite, frame: row * SPRITE_COLS + col })),
+            frameRate: Math.round(1000 / FRAME_DURATION_MS),
+            repeat: -1,
+          });
+        }
+        if (!this.anims.exists(idleKey)) {
+          this.anims.create({
+            key: idleKey,
+            frames: [{ key: npc.sprite, frame: row * SPRITE_COLS + 0 }],
+            frameRate: 1,
+            repeat: 0,
+          });
+        }
+      }
+
+      const { x, y } = this.gridToScreen(npc.gridX, npc.gridY);
+      const sprite = this.add.sprite(
+        Math.round(x),
+        Math.round(y + SCALED_TILE_H / 2),
+        npc.sprite,
+        0,
+      );
+      sprite.setScale(CHAR_SCALE);
+      sprite.setOrigin(0.5, 1.0);
+      sprite.setDepth(npc.gridY + npc.gridX + 0.8);
+      sprite.setFlipX(npc.direction === DIR_WEST);
+      sprite.play(`${npc.sprite}-idle-south`);
+
+      // Make NPC clickable
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerdown', () => {
+        this.showDialogue(npc.name, npc.dialogue);
+      });
+
+      // Name label
+      const label = this.add.text(Math.round(x), Math.round(y + SCALED_TILE_H / 2 - CHAR_H * CHAR_SCALE - 5), npc.name, {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: '#ffffff',
+        backgroundColor: '#00000088',
+        padding: { x: 3, y: 1 },
+      }).setOrigin(0.5, 1.0).setDepth(npc.gridY + npc.gridX + 0.9);
+
+      const state: NpcState = {
+        def: npc,
+        sprite,
+        label,
+        currentX: npc.gridX,
+        currentY: npc.gridY,
+        homeX: npc.gridX,
+        homeY: npc.gridY,
+        isMoving: false,
+      };
+      this.npcStates.push(state);
+
+      // Start wander loop
+      this.scheduleWander(state);
+    }
+  }
+
+  private scheduleWander(npc: NpcState): void {
+    const delay = Phaser.Math.Between(WANDER_MIN_PAUSE, WANDER_MAX_PAUSE);
+    this.time.delayedCall(delay, () => {
+      if (npc.isMoving) {
+        this.scheduleWander(npc);
+        return;
+      }
+      this.wanderNpc(npc);
+    });
+  }
+
+  private wanderNpc(npc: NpcState): void {
+    // Pick a random walkable tile within WANDER_RADIUS of home
+    const candidates: Array<{ x: number; y: number }> = [];
+    for (let dy = -WANDER_RADIUS; dy <= WANDER_RADIUS; dy++) {
+      for (let dx = -WANDER_RADIUS; dx <= WANDER_RADIUS; dx++) {
+        const tx = npc.homeX + dx;
+        const ty = npc.homeY + dy;
+        if (tx < 0 || tx >= MAP_COLS || ty < 0 || ty >= MAP_ROWS) continue;
+        if (tx === npc.currentX && ty === npc.currentY) continue;
+        if (!WALKABLE_TILES.includes(MAP_DATA[ty][tx])) continue;
+        candidates.push({ x: tx, y: ty });
+      }
+    }
+    if (candidates.length === 0) {
+      this.scheduleWander(npc);
+      return;
+    }
+
+    const target = Phaser.Utils.Array.GetRandom(candidates);
+    this.easystar.findPath(npc.currentX, npc.currentY, target.x, target.y, (path) => {
+      if (!path || path.length < 2) {
+        this.scheduleWander(npc);
+        return;
+      }
+      this.moveNpcAlongPath(npc, path.slice(1));
+    });
+    this.easystar.calculate();
+  }
+
+  private moveNpcAlongPath(npc: NpcState, path: Array<{ x: number; y: number }>): void {
+    if (path.length === 0) {
+      npc.isMoving = false;
+      const dirs = ['south', 'north', 'east', 'west'];
+      const dir = this.getNpcDirection(npc);
+      npc.sprite.play(`${npc.def.sprite}-idle-${dirs[dir]}`);
+      this.scheduleWander(npc);
+      return;
+    }
+
+    npc.isMoving = true;
+    const next = path[0];
+    const remaining = path.slice(1);
+
+    const dx = next.x - npc.currentX;
+    const dy = next.y - npc.currentY;
+
+    // Set direction
+    let dir = DIR_SOUTH;
+    if (dx > 0 && dy > 0) dir = DIR_SOUTH;
+    else if (dx < 0 && dy < 0) dir = DIR_NORTH;
+    else if (dx > 0 && dy < 0) dir = DIR_EAST;
+    else if (dx < 0 && dy > 0) dir = DIR_WEST;
+    else if (dx > 0) dir = DIR_EAST;
+    else if (dx < 0) dir = DIR_WEST;
+    else if (dy > 0) dir = DIR_SOUTH;
+    else if (dy < 0) dir = DIR_NORTH;
+
+    npc.sprite.setFlipX(dir === DIR_WEST);
+    const dirs = ['south', 'north', 'east', 'west'];
+    const walkKey = `${npc.def.sprite}-walk-${dirs[dir]}`;
+    if (npc.sprite.anims.currentAnim?.key !== walkKey) {
+      npc.sprite.play(walkKey);
+    }
+
+    const from = this.gridToScreen(npc.currentX, npc.currentY);
+    const to = this.gridToScreen(next.x, next.y);
+    const charOffsetY = SCALED_TILE_H / 2;
+    const stepDuration = (1 / NPC_MOVE_SPEED) * 1000;
+    const tweenTarget = { x: from.x, y: from.y + charOffsetY };
+
+    this.tweens.add({
+      targets: tweenTarget,
+      x: to.x,
+      y: to.y + charOffsetY,
+      duration: stepDuration,
+      ease: 'Linear',
+      onUpdate: () => {
+        npc.sprite.setPosition(Math.round(tweenTarget.x), Math.round(tweenTarget.y));
+        npc.label.setPosition(Math.round(tweenTarget.x), Math.round(tweenTarget.y - CHAR_H * CHAR_SCALE - 5));
+      },
+      onComplete: () => {
+        npc.currentX = next.x;
+        npc.currentY = next.y;
+        npc.sprite.setDepth(npc.currentY + npc.currentX + 0.8);
+        npc.label.setDepth(npc.currentY + npc.currentX + 0.9);
+        this.moveNpcAlongPath(npc, remaining);
+      },
+    });
+  }
+
+  private getNpcDirection(npc: NpcState): number {
+    return npc.def.direction;
+  }
+
+  private showDialogue(name: string, text: string): void {
+    // Remove previous dialogue
+    if (this.dialogueBox) {
+      this.dialogueBox.destroy();
+    }
+
+    const w = 400;
+    const h = 80;
+    const cx = this.scale.width / 2;
+    const cy = this.scale.height - 60;
+
+    const bg = this.add.rectangle(0, 0, w, h, 0x1a1a2e, 0.95)
+      .setStrokeStyle(2, 0x3a3a5e)
+      .setScrollFactor(0);
+
+    const nameText = this.add.text(-w / 2 + 12, -h / 2 + 8, name, {
+      fontFamily: 'monospace',
+      fontSize: '14px',
+      color: '#f1c40f',
+      fontStyle: 'bold',
+    }).setScrollFactor(0);
+
+    const dialogueText = this.add.text(-w / 2 + 12, -h / 2 + 28, text, {
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      color: '#e0e0e0',
+      wordWrap: { width: w - 24 },
+    }).setScrollFactor(0);
+
+    this.dialogueBox = this.add.container(cx, cy, [bg, nameText, dialogueText])
+      .setDepth(3000)
+      .setScrollFactor(0);
+
+    // Auto-dismiss after 4 seconds or on click
+    const timer = this.time.delayedCall(4000, () => {
+      this.dialogueBox?.destroy();
+      this.dialogueBox = null;
+    });
+
+    bg.setInteractive();
+    bg.on('pointerdown', () => {
+      timer.destroy();
+      this.dialogueBox?.destroy();
+      this.dialogueBox = null;
+    });
+  }
+
   // ── Camera ────────────────────────────────────────────────────
 
   private setupCamera(): void {
@@ -440,6 +720,36 @@ export class IsoScene extends Phaser.Scene {
     this.cameras.main.setBounds(minX, minY, maxX - minX, maxY - minY);
     this.cameras.main.startFollow(this.characterSprite, true, 0.1, 0.1);
     this.cameras.main.setZoom(1);
+
+    // Zoom with scroll wheel / trackpad pinch (Ctrl+scroll or pinch)
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _gameObjects: unknown[], deltaX: number, deltaY: number) => {
+      const cam = this.cameras.main;
+      // Pinch zoom (Ctrl+wheel) or regular scroll
+      const newZoom = Phaser.Math.Clamp(cam.zoom - deltaY * 0.002, 0.3, 3);
+      cam.setZoom(newZoom);
+    });
+
+    // Pan with arrow keys or WASD
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      const cam = this.cameras.main;
+      const panSpeed = 10 / cam.zoom;
+      if (event.key === 'ArrowLeft' || event.key === 'a') {
+        cam.stopFollow();
+        cam.scrollX -= panSpeed;
+      } else if (event.key === 'ArrowRight' || event.key === 'd') {
+        cam.stopFollow();
+        cam.scrollX += panSpeed;
+      } else if (event.key === 'ArrowUp' || event.key === 'w') {
+        cam.stopFollow();
+        cam.scrollY -= panSpeed;
+      } else if (event.key === 'ArrowDown' || event.key === 's') {
+        cam.stopFollow();
+        cam.scrollY += panSpeed;
+      } else if (event.key === 'c') {
+        // Press C to re-center on character
+        cam.startFollow(this.characterSprite, true, 0.1, 0.1);
+      }
+    });
   }
 
   // ── Highlights ────────────────────────────────────────────────
