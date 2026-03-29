@@ -117,6 +117,12 @@ export class MenuScene extends Phaser.Scene {
     exampleBtn.style.cssText = this.buttonStyle("#666");
     buttonRow.appendChild(exampleBtn);
 
+    const isoBtn = document.createElement("button");
+    isoBtn.id = "menu-iso-btn";
+    isoBtn.textContent = "Iso Demo";
+    isoBtn.style.cssText = this.buttonStyle("#2a7a4a");
+    buttonRow.appendChild(isoBtn);
+
     promptSection.appendChild(buttonRow);
 
     // Status text (loading / error)
@@ -176,6 +182,7 @@ export class MenuScene extends Phaser.Scene {
       }
     });
     exampleBtn.addEventListener("click", () => this.navigateToBootScene());
+    isoBtn.addEventListener("click", () => this.navigateToIsoScene());
     retryBtn.addEventListener("click", () => this.handleGenerate(promptInput.value));
   }
 
@@ -334,6 +341,11 @@ export class MenuScene extends Phaser.Scene {
   private navigateToBootScene(adventureId?: string): void {
     this.removeDOM();
     this.scene.start("BootScene", { adventureId });
+  }
+
+  private navigateToIsoScene(): void {
+    this.removeDOM();
+    this.scene.start("IsoScene");
   }
 
   private removeDOM(): void {
