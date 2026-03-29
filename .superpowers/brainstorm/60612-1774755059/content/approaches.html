@@ -1,0 +1,72 @@
+<h2>3 Approaches: Layered Character System</h2>
+<p class="subtitle">All use runtime compositing (OffscreenCanvas) + DSL/config driven. They differ in how layers are structured and assets managed.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Full Spritesheet Layers</h3>
+      <p>Each layer variant is a complete 7x3 spritesheet (same grid as today). Composed into one final spritesheet at load time.</p>
+      <div class="pros-cons" style="margin-top: 0.5rem;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Simplest compositing — just overlay PNGs pixel by pixel</li>
+          <li>Each layer is fully self-contained</li>
+          <li>Easy to hand-draw or AI-generate</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>More total pixels to draw (21 frames per variant)</li>
+          <li>Alignment must be pixel-perfect across all frames</li>
+        </ul></div>
+      </div>
+      <p style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.85rem;"><strong>Effort:</strong> ~2 weeks. ~10 base spritesheets to draw. Compositing is straightforward.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Region-Based Layers + Palette Swap</h3>
+      <p>Layers are partial spritesheets (only the pixels they affect). Body has skin-tone regions mapped to a palette. Clothing layers use indexed colors swapped at compose time.</p>
+      <div class="pros-cons" style="margin-top: 0.5rem;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Fewer pixels to draw — hair layer only has hair pixels</li>
+          <li>Color variations are free (palette swap)</li>
+          <li>Smallest asset footprint</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>More complex compositing (transparency masking + palette remapping)</li>
+          <li>Asset pipeline needs strict palette discipline</li>
+        </ul></div>
+      </div>
+      <p style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.85rem;"><strong>Effort:</strong> ~3 weeks. Less drawing, more code. Palette system adds complexity.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid: Full Sheets + Simple Recolor</h3>
+      <p>Layer variants are full 7x3 spritesheets (like A), but each uses a small indexed palette (3-4 colors). At compose time, palette colors are swapped for the chosen colors. Best of both worlds.</p>
+      <div class="pros-cons" style="margin-top: 0.5rem;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Simple compositing (overlay like A)</li>
+          <li>Color variations via palette swap (like B)</li>
+          <li>Asset creation is straightforward</li>
+          <li>Recolor logic is ~30 lines of code</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Still need full spritesheets per shape variant</li>
+          <li>Palette must be consistent across frames</li>
+        </ul></div>
+      </div>
+      <p style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.85rem;"><strong>Effort:</strong> ~2 weeks. Same drawing as A, recolor adds ~1 day of code.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;">
+  <h3 style="color: #a78bfa;">Recommendation: C (Hybrid)</h3>
+  <p style="color: #94a3b8; font-size: 0.9rem;">
+    Same simplicity as A for compositing and asset creation, but palette swap gives you infinite color variations for free. A hair_short.png base spritesheet can be blonde, brown, red, blue — just by swapping 3 colors. Minimal extra code, massive variety boost.
+  </p>
+</div>

@@ -1,0 +1,56 @@
+<h2>How should character parts layer?</h2>
+<p class="subtitle">Current sprites are 16x32px monolithic. A layered system composites parts on top of each other. Which body parts should be separate layers?</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="base-body" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Base Body (skin tone + shape)</h3>
+      <p>The silhouette/body shape with skin color. Foundation layer everything else sits on.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="hair" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Hair / Hat</h3>
+      <p>Hairstyle, color, headwear. Rendered on top of head area.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="eyes-face" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Eyes / Face</h3>
+      <p>Eye style, facial hair, glasses. Fine detail on the face area.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="torso" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>Torso / Shirt</h3>
+      <p>Upper body clothing — shirts, jackets, armor. Covers the torso area of the base body.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="legs" onclick="toggleSelect(this)">
+    <div class="letter">5</div>
+    <div class="content">
+      <h3>Legs / Pants</h3>
+      <p>Lower body clothing — pants, skirts, boots. Covers the leg area.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="accessory" onclick="toggleSelect(this)">
+    <div class="letter">6</div>
+    <div class="content">
+      <h3>Accessories</h3>
+      <p>Held items, backpacks, capes, jewelry. Extra detail layer on top of everything.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+  <h3>Complexity Reference</h3>
+  <p style="color: #94a3b8; font-size: 0.9rem;">
+    <strong>3 layers</strong> (body + hair + torso) = simple, ~50 asset variations needed<br>
+    <strong>4 layers</strong> (+ legs) = moderate, ~80 assets<br>
+    <strong>5-6 layers</strong> (+ face + accessories) = complex, 120+ assets, alignment gets tricky at 16x32px
+  </p>
+</div>
