@@ -11,20 +11,18 @@ import * as path from 'node:path';
  */
 
 /** Re-declare map constants to verify structure independently */
-const MAP_COLS = 10;
-const MAP_ROWS = 10;
+const MAP_COLS = 8;
+const MAP_ROWS = 8;
 
 const MAP_DATA: number[][] = [
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 2, 2, 0, 0, 3, 3, 1],
-  [1, 0, 5, 0, 0, 0, 8, 3, 0, 1],
-  [1, 2, 0, 0, 0, 0, 0, 0, 0, 1],
-  [1, 2, 0, 0, 4, 4, 0, 0, 0, 1],
-  [1, 0, 0, 0, 4, 4, 0, 0, 6, 1],
-  [1, 0, 7, 0, 0, 0, 0, 0, 0, 1],
-  [1, 3, 0, 0, 0, 0, 0, 2, 0, 1],
-  [1, 3, 0, 0, 0, 0, 5, 2, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 2, 2, 0, 3, 1],
+  [1, 0, 5, 0, 0, 8, 3, 1],
+  [1, 2, 0, 0, 0, 0, 0, 1],
+  [1, 2, 0, 4, 4, 0, 0, 1],
+  [1, 0, 7, 0, 0, 0, 6, 1],
+  [1, 3, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
 const WALKABLE_TILES = [0, 2, 3, 4];
@@ -57,9 +55,9 @@ describe('IsoScene map data', () => {
         }
       }
     }
-    // The interior is 8x8=64 cells; there should be a mix of walkable and blocked
-    expect(walkableCount).toBeGreaterThan(30);
-    expect(walkableCount).toBeLessThan(64);
+    // The interior is 6x6=36 cells; there should be a mix of walkable and blocked
+    expect(walkableCount).toBeGreaterThan(15);
+    expect(walkableCount).toBeLessThan(36);
   });
 
   it('character spawn position (1,1) is walkable', () => {
@@ -95,7 +93,7 @@ describe('IsoScene map data', () => {
   });
 });
 
-describe('Kenney tileset assets', () => {
+describe('Pixel art tileset assets', () => {
   const publicDir = path.resolve(__dirname, '../../public');
 
   const tileFiles = [
@@ -111,7 +109,7 @@ describe('Kenney tileset assets', () => {
   ];
 
   const characterFiles = [
-    'assets/characters/hero-idle.png',
+    'assets/characters/hero.png',
   ];
 
   for (const file of [...tileFiles, ...characterFiles]) {
@@ -143,14 +141,14 @@ describe('IsoScene source structure', () => {
     expect(source).toContain('export class IsoScene');
   });
 
-  it('preload() loads tile images', () => {
+  it('preload() loads tile images and hero spritesheet', () => {
     const source = fs.readFileSync(
       path.resolve(__dirname, './IsoScene.ts'),
       'utf-8',
     );
     expect(source).toContain("this.load.image('tile-floor-stone'");
     expect(source).toContain("this.load.image('tile-wall'");
-    expect(source).toContain("this.load.image('hero-idle'");
+    expect(source).toContain("this.load.spritesheet('hero'");
   });
 
   it('uses Phaser Image objects instead of Graphics for tiles', () => {
@@ -181,5 +179,41 @@ describe('IsoScene source structure', () => {
     expect(source).toContain('easystar');
     expect(source).toContain('findPath');
     expect(source).toContain('moveAlongPath');
+  });
+
+  it('has directional walking with 4 directions', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './IsoScene.ts'),
+      'utf-8',
+    );
+    expect(source).toContain('DIR_SOUTH');
+    expect(source).toContain('DIR_NORTH');
+    expect(source).toContain('DIR_EAST');
+    expect(source).toContain('DIR_WEST');
+    expect(source).toContain('setCharacterDirection');
+  });
+
+  it('creates walk and idle animations for each direction', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './IsoScene.ts'),
+      'utf-8',
+    );
+    expect(source).toContain('hero-walk-south');
+    expect(source).toContain('hero-walk-north');
+    expect(source).toContain('hero-walk-east');
+    expect(source).toContain('hero-walk-west');
+    expect(source).toContain('hero-idle-south');
+    expect(source).toContain('hero-idle-north');
+    expect(source).toContain('hero-idle-east');
+    expect(source).toContain('hero-idle-west');
+  });
+
+  it('uses TILE_SCALE for pixel art rendering', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './IsoScene.ts'),
+      'utf-8',
+    );
+    expect(source).toContain('TILE_SCALE');
+    expect(source).toContain('HERO_SCALE');
   });
 });
