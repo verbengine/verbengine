@@ -39,7 +39,7 @@ describe('VerbEngine bootstrap', () => {
     expect(pkg.dependencies.inkjs).toBeDefined();
   });
 
-  it('should have game config with correct dimensions', async () => {
+  it('should have game config with fullscreen responsive canvas', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
 
@@ -48,8 +48,12 @@ describe('VerbEngine bootstrap', () => {
       'utf-8'
     );
 
-    expect(configSource).toContain('960');
-    expect(configSource).toContain('600');
     expect(configSource).toContain('game-container');
+    expect(configSource).toContain('RESIZE');
+    expect(configSource).toContain("width: '100%'");
+    expect(configSource).toContain("height: '100%'");
+    expect(configSource).toContain('pixelArt: true');
+    expect(configSource).toContain('antialias: false');
+    expect(configSource).toContain('roundPixels: true');
   });
 });

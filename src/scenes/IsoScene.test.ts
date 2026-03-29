@@ -216,11 +216,15 @@ describe('IsoScene source structure', () => {
     expect(src).toContain("this.load.spritesheet('char_0'");
   });
 
-  it('uses Phaser Image objects for tiles', () => {
+  it('uses Phaser Image objects for tiles with correct origins', () => {
     const src = readSource();
     expect(src).toContain('this.add.image(');
     expect(src).toContain('setScale(ZOOM)');
     expect(src).not.toContain('drawDiamond');
+    // Floor tiles use origin (0.5, 0) — top-center aligned with diamond top point
+    expect(src).toContain('setOrigin(0.5, 0)');
+    // Uses Math.round for integer pixel positions (avoids sub-pixel blur)
+    expect(src).toContain('Math.round');
   });
 
   it('keeps hover highlight with Graphics overlay', () => {
@@ -280,6 +284,24 @@ describe('IsoScene source structure', () => {
     expect(src).toContain('startFollow');
     expect(src).toContain('setBounds');
     expect(src).toContain('setScrollFactor(0)');
+  });
+
+  it('re-centers UI text on window resize', () => {
+    const src = readSource();
+    expect(src).toContain("this.scale.on('resize'");
+    expect(src).toContain('this.scale.width');
+  });
+
+  it('uses two-pass rendering (floors then decorations)', () => {
+    const src = readSource();
+    expect(src).toContain('Pass 1');
+    expect(src).toContain('Pass 2');
+  });
+
+  it('positions character at diamond center with bottom-center origin', () => {
+    const src = readSource();
+    expect(src).toContain('setOrigin(0.5, 1.0)');
+    expect(src).toContain('SCALED_TILE_H / 2');
   });
 
   it('flips sprite horizontally for west direction', () => {
