@@ -3,6 +3,7 @@ import { MenuScene } from './scenes/MenuScene';
 import { BootScene } from './scenes/BootScene';
 import { GameScene } from './scenes/GameScene';
 import { IsoScene } from './scenes/IsoScene';
+import { AdventureScene } from './scenes/AdventureScene';
 
 export const gameConfig: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -20,5 +21,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     antialias: false,
     roundPixels: true,
   },
-  scene: [MenuScene, BootScene, GameScene, IsoScene],
+  scene: [MenuScene, BootScene, GameScene, IsoScene, AdventureScene],
 };
