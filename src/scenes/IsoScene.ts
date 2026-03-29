@@ -2,77 +2,137 @@ import Phaser from 'phaser';
 import EasyStar from 'easystarjs';
 import { cartToIso, isoToCart } from './iso-math';
 
-const TILE_WIDTH = 64;
-const TILE_HEIGHT = 32;
+// ── Fyso World–style constants ──────────────────────────────────
+/** Base tile diamond: 32x16 pixels (2:1 ratio) */
+const TILE_WIDTH = 32;
+const TILE_HEIGHT = 16;
 
-/** Smaller map that fills the screen better */
-const MAP_COLS = 8;
-const MAP_ROWS = 8;
+/** Zoom: everything rendered at 3x scale */
+const ZOOM = 3;
+
+/** Effective (scaled) tile dimensions */
+const SCALED_TILE_W = TILE_WIDTH * ZOOM;
+const SCALED_TILE_H = TILE_HEIGHT * ZOOM;
+
+/** Character frame size in the spritesheet */
+const CHAR_W = 16;
+const CHAR_H = 32;
+
+/** Character scale matches the tile zoom */
+const CHAR_SCALE = ZOOM;
+
+/** Movement speed in tiles/second and animation frame duration */
+const MOVE_SPEED = 2.5;
+const FRAME_DURATION_MS = 150; // 0.15s per frame
+
+// ── Map definition (25x25) ──────────────────────────────────────
+const MAP_COLS = 25;
+const MAP_ROWS = 25;
 
 /**
- * Map cell types:
- * 0 = stone floor (walkable)
- * 1 = wall (blocked)
- * 2 = tiled floor (walkable, visual variant)
- * 3 = dirt floor (walkable, visual variant)
- * 4 = planks floor (walkable, visual variant)
- * 5 = barrel decoration on floor (blocked)
- * 6 = crate decoration on floor (blocked)
- * 7 = chest decoration on floor (blocked)
- * 8 = table decoration on floor (blocked)
+ * Cell types:
+ * 0 = office floor (walkable)
+ * 1 = wall plain (blocked)
+ * 2 = wall window (blocked)
+ * 3 = desk (blocked decoration on floor)
+ * 4 = chair (walkable decoration on floor)
+ * 5 = bookshelf (blocked decoration on floor)
+ * 6 = barrel (blocked decoration on floor)
+ *
+ * Layout: 4 rooms connected by corridors
+ * - Top-left (rows 1-9, cols 1-9): Office with desks/chairs
+ * - Top-center (rows 1-9, cols 11-15): Meeting room
+ * - Top-right (rows 1-9, cols 17-23): Library with bookshelves
+ * - Bottom-left (rows 14-23, cols 1-9): Storage room with barrels
+ * - Bottom-right (rows 14-23, cols 11-23): Large open office
+ * - Rows 10-13: Horizontal corridor connecting everything
  */
 const MAP_DATA: number[][] = [
-  [1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 2, 2, 0, 3, 1],
-  [1, 0, 5, 0, 0, 8, 3, 1],
-  [1, 2, 0, 0, 0, 0, 0, 1],
-  [1, 2, 0, 4, 4, 0, 0, 1],
-  [1, 0, 7, 0, 0, 0, 6, 1],
-  [1, 3, 0, 0, 0, 0, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1],
+  // Row 0 — top perimeter
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  // Row 1
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  // Row 2
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  // Row 3 — office desks
+  [1,0,0,3,0,0,3,0,0,0,2,0,0,0,0,0,1,0,0,5,5,5,0,0,1],
+  // Row 4 — office chairs
+  [1,0,0,4,0,0,4,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  // Row 5
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,5,5,5,0,0,1],
+  // Row 6 — more desks
+  [1,0,0,3,0,0,3,0,0,0,1,0,0,0,0,0,2,0,0,0,0,0,0,0,1],
+  // Row 7 — more chairs
+  [1,0,0,4,0,0,4,0,0,0,2,0,0,0,0,0,0,0,0,5,5,5,0,0,1],
+  // Row 8
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  // Row 9
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,4,0,0,0,1],
+  // Row 10 — horizontal corridor wall with doorways
+  [1,1,1,1,1,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,1],
+  // Row 11 — corridor
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 12 — corridor
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 13 — horizontal wall with doorways
+  [1,1,1,0,0,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1],
+  // Row 14
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 15
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 16 — storage barrels
+  [1,0,6,6,0,0,0,0,0,0,1,0,0,3,0,0,3,0,0,0,0,0,0,0,1],
+  // Row 17
+  [1,0,0,0,0,0,6,6,0,0,2,0,0,4,0,0,4,0,0,0,0,0,0,0,1],
+  // Row 18
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 19 — more barrels
+  [1,0,6,0,0,0,0,6,0,0,1,0,0,3,0,0,3,0,0,0,0,0,0,0,1],
+  // Row 20
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,4,0,0,4,0,0,0,0,0,0,0,1],
+  // Row 21
+  [1,0,0,0,6,6,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 22
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,6,6,0,0,0,1],
+  // Row 23
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  // Row 24 — bottom perimeter
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
-/** Tiles that are walkable (pathfinder acceptable tiles) */
-const WALKABLE_TILES = [0, 2, 3, 4];
+/** Tiles the pathfinder treats as walkable */
+const WALKABLE_TILES = [0, 4];
 
-/** Map cell type to floor texture key */
-const FLOOR_TEXTURE_MAP: Record<number, string> = {
-  0: 'tile-floor-stone',
-  2: 'tile-floor-stone-tile',
-  3: 'tile-floor-dirt',
-  4: 'tile-floor-planks',
-};
+/** Floor texture for walkable cells */
+const FLOOR_KEY = 'tile-floor-office';
 
-/** Map cell type to decoration texture key (rendered on top of floor) */
-const DECORATION_TEXTURE_MAP: Record<number, string> = {
-  5: 'tile-barrel',
-  6: 'tile-crate',
-  7: 'tile-chest',
-  8: 'tile-table',
+/** Decoration texture keys (rendered on top of floor) */
+const DECO_KEY: Record<number, string> = {
+  3: 'tile-desk',
+  4: 'tile-chair',
+  5: 'tile-bookshelf',
+  6: 'tile-barrel',
 };
 
 const TARGET_COLOR = 0xffff00;
 const BLOCKED_COLOR = 0xff3333;
 const HOVER_COLOR = 0xffffff;
 
-/** Hero spritesheet frame dimensions */
-const HERO_FRAME_WIDTH = 32;
-const HERO_FRAME_HEIGHT = 32;
-
-/** Character direction indices (row in spritesheet) */
+/** Direction indices — rows 0-2 in the spritesheet, west = flipped east */
 const DIR_SOUTH = 0;
 const DIR_NORTH = 1;
 const DIR_EAST = 2;
 const DIR_WEST = 3;
 
 /**
- * Scale factor for pixel art tiles.
- * Tiles are native 64x32 pixel art, scale up for better visibility.
+ * Spritesheet layout (fyso_world):
+ * 7 columns x 3 rows, each frame 16x32.
+ * Columns: walk0 | walk1 | walk2 | type0 | type1 | read0 | read1
+ * Rows: DOWN(0) | UP(1) | RIGHT(2)
+ * Walk cycle ping-pong: 0, 1, 2, 1
  */
-const TILE_SCALE = 1.5;
-
-/** Scale factor applied to the hero character */
-const HERO_SCALE = 1.5;
+const SPRITE_COLS = 7;
+const WALK_CYCLE = [0, 1, 2, 1];
 
 export class IsoScene extends Phaser.Scene {
   private tileImages: Phaser.GameObjects.Image[][] = [];
@@ -81,7 +141,7 @@ export class IsoScene extends Phaser.Scene {
   private targetHighlight!: Phaser.GameObjects.Graphics;
   private hoverHighlight!: Phaser.GameObjects.Graphics;
 
-  /** Current character position in grid coords */
+  /** Current character grid position */
   private charGridX = 1;
   private charGridY = 1;
 
@@ -92,14 +152,6 @@ export class IsoScene extends Phaser.Scene {
   private hoverCol = -1;
   private hoverRow = -1;
 
-  /** Offset to center the map on screen */
-  private offsetX = 0;
-  private offsetY = 0;
-
-  /** Effective tile dimensions after scaling */
-  private scaledTileWidth = TILE_WIDTH * TILE_SCALE;
-  private scaledTileHeight = TILE_HEIGHT * TILE_SCALE;
-
   private easystar!: EasyStar.js;
   private isMoving = false;
 
@@ -108,33 +160,28 @@ export class IsoScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Floor tiles (64x32 pixel art)
-    this.load.image('tile-floor-stone', '/assets/tiles/floor-stone.png');
-    this.load.image('tile-floor-stone-tile', '/assets/tiles/floor-stone-tile.png');
-    this.load.image('tile-floor-dirt', '/assets/tiles/floor-dirt.png');
-    this.load.image('tile-floor-planks', '/assets/tiles/floor-planks.png');
+    // Floor tile (32x16 base)
+    this.load.image(FLOOR_KEY, '/assets/tiles/floor_office.png');
 
-    // Wall tile (64x48 pixel art with depth)
-    this.load.image('tile-wall', '/assets/tiles/wall-stone.png');
+    // Wall tiles
+    this.load.image('tile-wall-plain', '/assets/tiles/wall_plain.png');
+    this.load.image('tile-wall-window', '/assets/tiles/wall_window.png');
 
     // Decorations
+    this.load.image('tile-desk', '/assets/tiles/desk.png');
+    this.load.image('tile-chair', '/assets/tiles/chair.png');
+    this.load.image('tile-bookshelf', '/assets/tiles/bookshelf.png');
     this.load.image('tile-barrel', '/assets/tiles/barrel.png');
-    this.load.image('tile-crate', '/assets/tiles/crate.png');
-    this.load.image('tile-chest', '/assets/tiles/chest.png');
-    this.load.image('tile-table', '/assets/tiles/table.png');
 
-    // Hero spritesheet: 3 columns x 4 rows, 32x32 per frame
-    this.load.spritesheet('hero', '/assets/characters/hero.png', {
-      frameWidth: HERO_FRAME_WIDTH,
-      frameHeight: HERO_FRAME_HEIGHT,
+    // Character spritesheet: 7 cols x 3 rows, 16x32 per frame
+    this.load.spritesheet('char_0', '/assets/characters/char_0.png', {
+      frameWidth: CHAR_W,
+      frameHeight: CHAR_H,
     });
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#1a1a2e');
-
-    this.offsetX = Number(this.game.config.width) / 2;
-    this.offsetY = 100;
+    this.cameras.main.setBackgroundColor('#2c2c3a');
 
     this.setupAnimations();
     this.setupPathfinder();
@@ -143,8 +190,9 @@ export class IsoScene extends Phaser.Scene {
     this.createTargetHighlight();
     this.createHoverHighlight();
     this.setupInput();
+    this.setupCamera();
 
-    // Back button
+    // Fixed-position UI (ignores camera scroll)
     this.add
       .text(16, 16, '< Back', {
         fontFamily: 'monospace',
@@ -154,71 +202,71 @@ export class IsoScene extends Phaser.Scene {
         padding: { x: 8, y: 4 },
       })
       .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0)
+      .setDepth(2000)
       .on('pointerdown', () => {
         this.scene.start('MenuScene');
       });
 
-    // Title
-    this.add.text(Number(this.game.config.width) / 2, 16, 'Isometric Dungeon', {
+    this.add.text(Number(this.game.config.width) / 2, 16, 'Fyso World Office', {
       fontFamily: 'monospace',
       fontSize: '18px',
       color: '#ffffff',
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
 
-    // Instructions
-    this.add.text(Number(this.game.config.width) / 2, 44, 'Click a floor tile to move the character', {
+    this.add.text(Number(this.game.config.width) / 2, 44, 'Click a floor tile to move', {
       fontFamily: 'monospace',
       fontSize: '12px',
       color: '#888888',
-    }).setOrigin(0.5, 0);
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
   }
 
-  /** Create walk animations for each direction */
+  // ── Animations ────────────────────────────────────────────────
+
   private setupAnimations(): void {
-    // Each row has 3 frames (columns 0,1,2). Row index = direction.
-    // Frame indices in the spritesheet: row * 3 + column
-    const directions = [
-      { key: 'hero-walk-south', row: DIR_SOUTH },
-      { key: 'hero-walk-north', row: DIR_NORTH },
-      { key: 'hero-walk-east', row: DIR_EAST },
-      { key: 'hero-walk-west', row: DIR_WEST },
+    // Walk: 4-step ping-pong using spritesheet columns 0,1,2
+    const walkDirs = [
+      { key: 'char-walk-south', row: 0 },
+      { key: 'char-walk-north', row: 1 },
+      { key: 'char-walk-east', row: 2 },
+      { key: 'char-walk-west', row: 2 }, // same frames, flipped in render
     ];
 
-    for (const { key, row } of directions) {
+    for (const { key, row } of walkDirs) {
       if (!this.anims.exists(key)) {
         this.anims.create({
           key,
-          frames: [
-            { key: 'hero', frame: row * 3 + 1 },
-            { key: 'hero', frame: row * 3 + 0 },
-            { key: 'hero', frame: row * 3 + 2 },
-            { key: 'hero', frame: row * 3 + 0 },
-          ],
-          frameRate: 8,
+          frames: WALK_CYCLE.map((col) => ({
+            key: 'char_0',
+            frame: row * SPRITE_COLS + col,
+          })),
+          frameRate: Math.round(1000 / FRAME_DURATION_MS),
           repeat: -1,
         });
       }
     }
 
-    // Idle frames (standing, frame 0 of each direction row)
-    const idles = [
-      { key: 'hero-idle-south', row: DIR_SOUTH },
-      { key: 'hero-idle-north', row: DIR_NORTH },
-      { key: 'hero-idle-east', row: DIR_EAST },
-      { key: 'hero-idle-west', row: DIR_WEST },
+    // Idle: frame 0 of each row
+    const idleDirs = [
+      { key: 'char-idle-south', row: 0 },
+      { key: 'char-idle-north', row: 1 },
+      { key: 'char-idle-east', row: 2 },
+      { key: 'char-idle-west', row: 2 },
     ];
 
-    for (const { key, row } of idles) {
+    for (const { key, row } of idleDirs) {
       if (!this.anims.exists(key)) {
         this.anims.create({
           key,
-          frames: [{ key: 'hero', frame: row * 3 + 0 }],
+          frames: [{ key: 'char_0', frame: row * SPRITE_COLS + 0 }],
           frameRate: 1,
           repeat: 0,
         });
       }
     }
   }
+
+  // ── Pathfinder ────────────────────────────────────────────────
 
   private setupPathfinder(): void {
     this.easystar = new EasyStar.js();
@@ -228,20 +276,17 @@ export class IsoScene extends Phaser.Scene {
     this.easystar.enableCornerCutting();
   }
 
-  /** Convert grid coords to screen position (center of tile diamond), scaled */
+  // ── Coordinate helpers ────────────────────────────────────────
+
+  /** Convert grid coords to world-space screen position (center of diamond) */
   private gridToScreen(gx: number, gy: number): { x: number; y: number } {
-    const iso = cartToIso(gx, gy, this.scaledTileWidth, this.scaledTileHeight);
-    return {
-      x: iso.x + this.offsetX,
-      y: iso.y + this.offsetY,
-    };
+    return cartToIso(gx, gy, SCALED_TILE_W, SCALED_TILE_H);
   }
 
-  /** Convert screen coords to grid coords (floored to integer), scaled */
+  /** Convert viewport screen coords (accounting for camera scroll) to grid */
   private screenToGrid(sx: number, sy: number): { col: number; row: number } | null {
-    const relX = sx - this.offsetX;
-    const relY = sy - this.offsetY;
-    const cart = isoToCart(relX, relY, this.scaledTileWidth, this.scaledTileHeight);
+    const worldPoint = this.cameras.main.getWorldPoint(sx, sy);
+    const cart = isoToCart(worldPoint.x, worldPoint.y, SCALED_TILE_W, SCALED_TILE_H);
     const col = Math.floor(cart.x);
     const row = Math.floor(cart.y);
 
@@ -250,6 +295,8 @@ export class IsoScene extends Phaser.Scene {
     }
     return { col, row };
   }
+
+  // ── Map rendering ─────────────────────────────────────────────
 
   private drawMap(): void {
     this.tileImages = [];
@@ -262,26 +309,32 @@ export class IsoScene extends Phaser.Scene {
         const { x, y } = this.gridToScreen(col, row);
 
         if (cellType === 1) {
-          // Wall tile (64x48, has height)
-          const wallImg = this.add.image(x, y, 'tile-wall');
-          wallImg.setScale(TILE_SCALE);
+          // Plain wall
+          const wallImg = this.add.image(x, y, 'tile-wall-plain');
+          wallImg.setScale(ZOOM);
+          wallImg.setOrigin(0.5, 0.75);
+          wallImg.setDepth(row + col);
+          this.tileImages[row][col] = wallImg;
+        } else if (cellType === 2) {
+          // Window wall
+          const wallImg = this.add.image(x, y, 'tile-wall-window');
+          wallImg.setScale(ZOOM);
           wallImg.setOrigin(0.5, 0.75);
           wallImg.setDepth(row + col);
           this.tileImages[row][col] = wallImg;
         } else {
-          // Floor tile (pick texture based on cell type)
-          const textureKey = FLOOR_TEXTURE_MAP[cellType] ?? 'tile-floor-stone';
-          const floorImg = this.add.image(x, y, textureKey);
-          floorImg.setScale(TILE_SCALE);
+          // Floor tile (all walkable or decorated cells get floor underneath)
+          const floorImg = this.add.image(x, y, FLOOR_KEY);
+          floorImg.setScale(ZOOM);
           floorImg.setOrigin(0.5, 0.5);
           floorImg.setDepth(row + col);
           this.tileImages[row][col] = floorImg;
 
-          // Decoration on top of floor
-          const decoKey = DECORATION_TEXTURE_MAP[cellType];
+          // Decoration on top of the floor
+          const decoKey = DECO_KEY[cellType];
           if (decoKey) {
-            const decoImg = this.add.image(x, y - 8 * TILE_SCALE, decoKey);
-            decoImg.setScale(TILE_SCALE);
+            const decoImg = this.add.image(x, y - 8 * ZOOM, decoKey);
+            decoImg.setScale(ZOOM);
             decoImg.setOrigin(0.5, 0.5);
             decoImg.setDepth(row + col + 0.5);
             this.decorationImages.push(decoImg);
@@ -291,12 +344,15 @@ export class IsoScene extends Phaser.Scene {
     }
   }
 
+  // ── Character ─────────────────────────────────────────────────
+
   private createCharacter(): void {
     const { x, y } = this.gridToScreen(this.charGridX, this.charGridY);
-    this.characterSprite = this.add.sprite(x, y, 'hero', DIR_SOUTH * 3);
-    this.characterSprite.setScale(HERO_SCALE);
+    this.characterSprite = this.add.sprite(x, y, 'char_0', 0);
+    this.characterSprite.setScale(CHAR_SCALE);
     this.characterSprite.setOrigin(0.5, 0.8);
     this.updateCharacterDepth();
+    this.characterSprite.play('char-idle-south');
   }
 
   private updateCharacterDepth(): void {
@@ -307,7 +363,7 @@ export class IsoScene extends Phaser.Scene {
     this.characterSprite.setPosition(screenX, screenY);
   }
 
-  /** Determine direction from movement delta and play appropriate animation */
+  /** Determine direction from movement delta and apply sprite flip */
   private setCharacterDirection(dx: number, dy: number): void {
     if (dx > 0 && dy > 0) {
       this.charDirection = DIR_SOUTH;
@@ -326,17 +382,41 @@ export class IsoScene extends Phaser.Scene {
     } else if (dy < 0) {
       this.charDirection = DIR_NORTH;
     }
+
+    // West = horizontally flipped east row
+    this.characterSprite.setFlipX(this.charDirection === DIR_WEST);
   }
 
   private getWalkAnimKey(): string {
     const dirNames = ['south', 'north', 'east', 'west'];
-    return `hero-walk-${dirNames[this.charDirection]}`;
+    return `char-walk-${dirNames[this.charDirection]}`;
   }
 
   private getIdleAnimKey(): string {
     const dirNames = ['south', 'north', 'east', 'west'];
-    return `hero-idle-${dirNames[this.charDirection]}`;
+    return `char-idle-${dirNames[this.charDirection]}`;
   }
+
+  // ── Camera ────────────────────────────────────────────────────
+
+  private setupCamera(): void {
+    // Compute world bounds from map corners (isometric diamond extents)
+    const topLeft = this.gridToScreen(0, 0);
+    const topRight = this.gridToScreen(MAP_COLS, 0);
+    const bottomLeft = this.gridToScreen(0, MAP_ROWS);
+    const bottomRight = this.gridToScreen(MAP_COLS, MAP_ROWS);
+
+    const minX = Math.min(topLeft.x, bottomLeft.x) - SCALED_TILE_W;
+    const maxX = Math.max(topRight.x, bottomRight.x) + SCALED_TILE_W;
+    const minY = Math.min(topLeft.y, topRight.y) - SCALED_TILE_H * 2;
+    const maxY = Math.max(bottomLeft.y, bottomRight.y) + SCALED_TILE_H * 2;
+
+    this.cameras.main.setBounds(minX, minY, maxX - minX, maxY - minY);
+    this.cameras.main.startFollow(this.characterSprite, true, 0.1, 0.1);
+    this.cameras.main.setZoom(1);
+  }
+
+  // ── Highlights ────────────────────────────────────────────────
 
   private createTargetHighlight(): void {
     this.targetHighlight = this.add.graphics();
@@ -365,8 +445,8 @@ export class IsoScene extends Phaser.Scene {
     alpha: number,
   ): void {
     const { x, y } = this.gridToScreen(col, row);
-    const hw = this.scaledTileWidth / 2;
-    const hh = this.scaledTileHeight / 2;
+    const hw = SCALED_TILE_W / 2;
+    const hh = SCALED_TILE_H / 2;
 
     graphics.fillStyle(color, alpha);
     graphics.beginPath();
@@ -381,8 +461,8 @@ export class IsoScene extends Phaser.Scene {
   private drawHoverHighlight(col: number, row: number): void {
     this.hoverHighlight.clear();
     const { x, y } = this.gridToScreen(col, row);
-    const hw = this.scaledTileWidth / 2;
-    const hh = this.scaledTileHeight / 2;
+    const hw = SCALED_TILE_W / 2;
+    const hh = SCALED_TILE_H / 2;
 
     this.hoverHighlight.lineStyle(2, HOVER_COLOR, 0.8);
     this.hoverHighlight.beginPath();
@@ -409,6 +489,8 @@ export class IsoScene extends Phaser.Scene {
     this.hoverRow = -1;
   }
 
+  // ── Input ─────────────────────────────────────────────────────
+
   private setupInput(): void {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.isMoving) return;
@@ -419,13 +501,11 @@ export class IsoScene extends Phaser.Scene {
       const { col, row } = grid;
       const cellType = MAP_DATA[row][col];
 
-      // Check if blocked (wall or decoration)
       if (!WALKABLE_TILES.includes(cellType)) {
         this.showTargetHighlight(col, row, BLOCKED_COLOR);
         return;
       }
 
-      // Check if already at target
       if (col === this.charGridX && row === this.charGridY) return;
 
       this.showTargetHighlight(col, row, TARGET_COLOR);
@@ -440,7 +520,6 @@ export class IsoScene extends Phaser.Scene {
       }
 
       const { col, row } = grid;
-
       if (col === this.hoverCol && row === this.hoverRow) return;
 
       this.hoverCol = col;
@@ -448,6 +527,8 @@ export class IsoScene extends Phaser.Scene {
       this.drawHoverHighlight(col, row);
     });
   }
+
+  // ── Movement ──────────────────────────────────────────────────
 
   private findAndMoveTo(targetCol: number, targetRow: number): void {
     this.easystar.findPath(
@@ -466,7 +547,6 @@ export class IsoScene extends Phaser.Scene {
   private moveAlongPath(path: Array<{ x: number; y: number }>): void {
     if (path.length === 0) {
       this.isMoving = false;
-      // Stop walk animation, show idle frame in current direction
       this.characterSprite.play(this.getIdleAnimKey());
       return;
     }
@@ -475,12 +555,10 @@ export class IsoScene extends Phaser.Scene {
     const next = path[0];
     const remaining = path.slice(1);
 
-    // Calculate movement direction
     const dx = next.x - this.charGridX;
     const dy = next.y - this.charGridY;
     this.setCharacterDirection(dx, dy);
 
-    // Play walk animation for current direction
     const walkKey = this.getWalkAnimKey();
     if (this.characterSprite.anims.currentAnim?.key !== walkKey) {
       this.characterSprite.play(walkKey);
@@ -489,13 +567,15 @@ export class IsoScene extends Phaser.Scene {
     const from = this.gridToScreen(this.charGridX, this.charGridY);
     const to = this.gridToScreen(next.x, next.y);
 
+    // Duration from MOVE_SPEED (tiles/second)
+    const stepDuration = (1 / MOVE_SPEED) * 1000;
     const tweenTarget = { x: from.x, y: from.y };
 
     this.tweens.add({
       targets: tweenTarget,
       x: to.x,
       y: to.y,
-      duration: 220,
+      duration: stepDuration,
       ease: 'Linear',
       onUpdate: () => {
         this.positionCharacter(tweenTarget.x, tweenTarget.y);

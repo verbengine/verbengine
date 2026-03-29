@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Tests for IsoScene tileset integration.
+ * Tests for IsoScene — Fyso World style tileset and large multi-room map.
  *
  * Since IsoScene is a Phaser.Scene that requires a running game instance,
  * we test the data layer (map structure, asset files) rather than rendering.
@@ -11,23 +11,56 @@ import * as path from 'node:path';
  */
 
 /** Re-declare map constants to verify structure independently */
-const MAP_COLS = 8;
-const MAP_ROWS = 8;
+const MAP_COLS = 25;
+const MAP_ROWS = 25;
 
+/**
+ * Cell types (matching IsoScene.ts):
+ * 0 = office floor (walkable)
+ * 1 = wall plain (blocked)
+ * 2 = wall window (blocked)
+ * 3 = desk (blocked decoration)
+ * 4 = chair (walkable decoration)
+ * 5 = bookshelf (blocked decoration)
+ * 6 = barrel (blocked decoration)
+ */
 const MAP_DATA: number[][] = [
-  [1, 1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 2, 2, 0, 3, 1],
-  [1, 0, 5, 0, 0, 8, 3, 1],
-  [1, 2, 0, 0, 0, 0, 0, 1],
-  [1, 2, 0, 4, 4, 0, 0, 1],
-  [1, 0, 7, 0, 0, 0, 6, 1],
-  [1, 3, 0, 0, 0, 0, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1, 1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,3,0,0,3,0,0,0,2,0,0,0,0,0,1,0,0,5,5,5,0,0,1],
+  [1,0,0,4,0,0,4,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,5,5,5,0,0,1],
+  [1,0,0,3,0,0,3,0,0,0,1,0,0,0,0,0,2,0,0,0,0,0,0,0,1],
+  [1,0,0,4,0,0,4,0,0,0,2,0,0,0,0,0,0,0,0,5,5,5,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,4,0,0,0,1],
+  [1,1,1,1,1,0,0,1,1,1,1,0,0,0,0,0,1,1,1,0,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,0,0,1,1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,6,6,0,0,0,0,0,0,1,0,0,3,0,0,3,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,6,6,0,0,2,0,0,4,0,0,4,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,6,0,0,0,0,6,0,0,1,0,0,3,0,0,3,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,4,0,0,4,0,0,0,0,0,0,0,1],
+  [1,0,0,0,6,6,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,6,6,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
-const WALKABLE_TILES = [0, 2, 3, 4];
+const WALKABLE_TILES = [0, 4];
 
-describe('IsoScene map data', () => {
+/** Wall types (blocked non-decoration) */
+const WALL_TILES = [1, 2];
+
+/** Blocked decoration types */
+const BLOCKED_DECO = [3, 5, 6];
+
+describe('IsoScene map data (25x25 multi-room)', () => {
   it('has correct dimensions', () => {
     expect(MAP_DATA).toHaveLength(MAP_ROWS);
     for (const row of MAP_DATA) {
@@ -46,7 +79,7 @@ describe('IsoScene map data', () => {
     }
   });
 
-  it('has walkable interior tiles for pathfinding', () => {
+  it('has a large number of walkable tiles for pathfinding', () => {
     let walkableCount = 0;
     for (let row = 1; row < MAP_ROWS - 1; row++) {
       for (let col = 1; col < MAP_COLS - 1; col++) {
@@ -55,61 +88,87 @@ describe('IsoScene map data', () => {
         }
       }
     }
-    // The interior is 6x6=36 cells; there should be a mix of walkable and blocked
-    expect(walkableCount).toBeGreaterThan(15);
-    expect(walkableCount).toBeLessThan(36);
+    // 25x25 map with 23x23 interior = 529 cells; expect many walkable
+    expect(walkableCount).toBeGreaterThan(200);
   });
 
   it('character spawn position (1,1) is walkable', () => {
     expect(WALKABLE_TILES.includes(MAP_DATA[1][1])).toBe(true);
   });
 
-  it('uses multiple floor variants', () => {
-    const cellTypes = new Set<number>();
-    for (const row of MAP_DATA) {
-      for (const cell of row) {
-        cellTypes.add(cell);
-      }
-    }
-    // Should have at least: wall (1), stone (0), tiled (2), dirt (3), planks (4)
-    expect(cellTypes.has(0)).toBe(true);
-    expect(cellTypes.has(1)).toBe(true);
-    expect(cellTypes.has(2)).toBe(true);
-    expect(cellTypes.has(3)).toBe(true);
-    expect(cellTypes.has(4)).toBe(true);
+  it('has doorways connecting rooms (floor tiles in wall rows)', () => {
+    // Row 10 should have doorways (floor tiles between walls)
+    const row10 = MAP_DATA[10];
+    const hasFloorInRow10 = row10.some((cell) => WALKABLE_TILES.includes(cell));
+    expect(hasFloorInRow10).toBe(true);
+
+    // Row 13 should have doorways
+    const row13 = MAP_DATA[13];
+    const hasFloorInRow13 = row13.some((cell) => WALKABLE_TILES.includes(cell));
+    expect(hasFloorInRow13).toBe(true);
   });
 
-  it('uses decoration tiles (barrel, crate, chest, table)', () => {
+  it('uses wall-plain and wall-window types', () => {
     const cellTypes = new Set<number>();
     for (const row of MAP_DATA) {
       for (const cell of row) {
         cellTypes.add(cell);
       }
     }
-    expect(cellTypes.has(5)).toBe(true); // barrel
-    expect(cellTypes.has(6)).toBe(true); // crate
-    expect(cellTypes.has(7)).toBe(true); // chest
-    expect(cellTypes.has(8)).toBe(true); // table
+    expect(cellTypes.has(1)).toBe(true); // wall plain
+    expect(cellTypes.has(2)).toBe(true); // wall window
+  });
+
+  it('uses decoration types: desk, chair, bookshelf, barrel', () => {
+    const cellTypes = new Set<number>();
+    for (const row of MAP_DATA) {
+      for (const cell of row) {
+        cellTypes.add(cell);
+      }
+    }
+    expect(cellTypes.has(3)).toBe(true); // desk
+    expect(cellTypes.has(4)).toBe(true); // chair
+    expect(cellTypes.has(5)).toBe(true); // bookshelf
+    expect(cellTypes.has(6)).toBe(true); // barrel
+  });
+
+  it('has multiple distinct rooms separated by walls', () => {
+    // Vertical wall at col 10 (top section)
+    let wallCountCol10 = 0;
+    for (let row = 0; row <= 10; row++) {
+      if (WALL_TILES.includes(MAP_DATA[row][10])) {
+        wallCountCol10++;
+      }
+    }
+    expect(wallCountCol10).toBeGreaterThan(5);
+
+    // Vertical wall at col 16 (top section)
+    let wallCountCol16 = 0;
+    for (let row = 0; row <= 10; row++) {
+      if (WALL_TILES.includes(MAP_DATA[row][16])) {
+        wallCountCol16++;
+      }
+    }
+    expect(wallCountCol16).toBeGreaterThan(5);
   });
 });
 
-describe('Pixel art tileset assets', () => {
+describe('Fyso World tileset assets', () => {
   const publicDir = path.resolve(__dirname, '../../public');
 
   const tileFiles = [
-    'assets/tiles/floor-stone.png',
-    'assets/tiles/floor-stone-tile.png',
-    'assets/tiles/floor-dirt.png',
-    'assets/tiles/floor-planks.png',
-    'assets/tiles/wall-stone.png',
+    'assets/tiles/floor_office.png',
+    'assets/tiles/wall_plain.png',
+    'assets/tiles/wall_window.png',
+    'assets/tiles/desk.png',
+    'assets/tiles/chair.png',
+    'assets/tiles/bookshelf.png',
     'assets/tiles/barrel.png',
-    'assets/tiles/crate.png',
-    'assets/tiles/chest.png',
-    'assets/tiles/table.png',
   ];
 
   const characterFiles = [
-    'assets/characters/hero.png',
+    'assets/characters/char_0.png',
+    'assets/characters/char_1.png',
   ];
 
   for (const file of [...tileFiles, ...characterFiles]) {
@@ -130,90 +189,107 @@ describe('Pixel art tileset assets', () => {
       expect(buffer[3]).toBe(71);
     }
   });
+
+  it('character spritesheets are PNG files', () => {
+    for (const file of characterFiles) {
+      const fullPath = path.join(publicDir, file);
+      const buffer = fs.readFileSync(fullPath);
+      expect(buffer[0]).toBe(137);
+      expect(buffer[1]).toBe(80);
+    }
+  });
 });
 
 describe('IsoScene source structure', () => {
-  it('IsoScene.ts exports IsoScene class', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('export class IsoScene');
+  const readSource = (): string =>
+    fs.readFileSync(path.resolve(__dirname, './IsoScene.ts'), 'utf-8');
+
+  it('exports IsoScene class', () => {
+    expect(readSource()).toContain('export class IsoScene');
   });
 
-  it('preload() loads tile images and hero spritesheet', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain("this.load.image('tile-floor-stone'");
-    expect(source).toContain("this.load.image('tile-wall'");
-    expect(source).toContain("this.load.spritesheet('hero'");
+  it('preload() loads Fyso World tile images and char spritesheet', () => {
+    const src = readSource();
+    expect(src).toContain("this.load.image(FLOOR_KEY");
+    expect(src).toContain("this.load.image('tile-wall-plain'");
+    expect(src).toContain("this.load.image('tile-wall-window'");
+    expect(src).toContain("this.load.spritesheet('char_0'");
   });
 
-  it('uses Phaser Image objects instead of Graphics for tiles', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('this.add.image(');
-    expect(source).toContain('setScale(TILE_SCALE)');
-    // Should NOT use drawDiamond for map tiles anymore
-    expect(source).not.toContain('drawDiamond');
+  it('uses Phaser Image objects for tiles', () => {
+    const src = readSource();
+    expect(src).toContain('this.add.image(');
+    expect(src).toContain('setScale(ZOOM)');
+    expect(src).not.toContain('drawDiamond');
   });
 
   it('keeps hover highlight with Graphics overlay', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('drawHoverHighlight');
-    expect(source).toContain('hoverHighlight');
+    const src = readSource();
+    expect(src).toContain('drawHoverHighlight');
+    expect(src).toContain('hoverHighlight');
   });
 
   it('keeps pathfinding with EasyStar', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('easystar');
-    expect(source).toContain('findPath');
-    expect(source).toContain('moveAlongPath');
+    const src = readSource();
+    expect(src).toContain('easystar');
+    expect(src).toContain('findPath');
+    expect(src).toContain('moveAlongPath');
   });
 
   it('has directional walking with 4 directions', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('DIR_SOUTH');
-    expect(source).toContain('DIR_NORTH');
-    expect(source).toContain('DIR_EAST');
-    expect(source).toContain('DIR_WEST');
-    expect(source).toContain('setCharacterDirection');
+    const src = readSource();
+    expect(src).toContain('DIR_SOUTH');
+    expect(src).toContain('DIR_NORTH');
+    expect(src).toContain('DIR_EAST');
+    expect(src).toContain('DIR_WEST');
+    expect(src).toContain('setCharacterDirection');
   });
 
   it('creates walk and idle animations for each direction', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('hero-walk-south');
-    expect(source).toContain('hero-walk-north');
-    expect(source).toContain('hero-walk-east');
-    expect(source).toContain('hero-walk-west');
-    expect(source).toContain('hero-idle-south');
-    expect(source).toContain('hero-idle-north');
-    expect(source).toContain('hero-idle-east');
-    expect(source).toContain('hero-idle-west');
+    const src = readSource();
+    expect(src).toContain('char-walk-south');
+    expect(src).toContain('char-walk-north');
+    expect(src).toContain('char-walk-east');
+    expect(src).toContain('char-walk-west');
+    expect(src).toContain('char-idle-south');
+    expect(src).toContain('char-idle-north');
+    expect(src).toContain('char-idle-east');
+    expect(src).toContain('char-idle-west');
   });
 
-  it('uses TILE_SCALE for pixel art rendering', () => {
-    const source = fs.readFileSync(
-      path.resolve(__dirname, './IsoScene.ts'),
-      'utf-8',
-    );
-    expect(source).toContain('TILE_SCALE');
-    expect(source).toContain('HERO_SCALE');
+  it('uses ZOOM for pixel art rendering at 3x', () => {
+    const src = readSource();
+    expect(src).toContain('ZOOM = 3');
+    expect(src).toContain('CHAR_SCALE');
+  });
+
+  it('uses Fyso World tile dimensions (32x16 base)', () => {
+    const src = readSource();
+    expect(src).toContain('TILE_WIDTH = 32');
+    expect(src).toContain('TILE_HEIGHT = 16');
+  });
+
+  it('uses Fyso World character dimensions (16x32)', () => {
+    const src = readSource();
+    expect(src).toContain('CHAR_W = 16');
+    expect(src).toContain('CHAR_H = 32');
+  });
+
+  it('has camera follow for the large map', () => {
+    const src = readSource();
+    expect(src).toContain('startFollow');
+    expect(src).toContain('setBounds');
+    expect(src).toContain('setScrollFactor(0)');
+  });
+
+  it('flips sprite horizontally for west direction', () => {
+    const src = readSource();
+    expect(src).toContain('setFlipX');
+  });
+
+  it('uses MOVE_SPEED for tween duration', () => {
+    const src = readSource();
+    expect(src).toContain('MOVE_SPEED');
+    expect(src).toContain('stepDuration');
   });
 });
