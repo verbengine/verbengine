@@ -208,17 +208,23 @@ export class IsoScene extends Phaser.Scene {
         this.scene.start('MenuScene');
       });
 
-    this.add.text(Number(this.game.config.width) / 2, 16, 'Fyso World Office', {
+    const titleText = this.add.text(this.scale.width / 2, 16, 'Fyso World Office', {
       fontFamily: 'monospace',
       fontSize: '18px',
       color: '#ffffff',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
 
-    this.add.text(Number(this.game.config.width) / 2, 44, 'Click a floor tile to move', {
+    const instrText = this.add.text(this.scale.width / 2, 44, 'Click a floor tile to move', {
       fontFamily: 'monospace',
       fontSize: '12px',
       color: '#888888',
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(2000);
+
+    // Re-center UI text when window resizes
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
+      titleText.setX(gameSize.width / 2);
+      instrText.setX(gameSize.width / 2);
+    });
   }
 
   // ── Animations ────────────────────────────────────────────────
@@ -278,7 +284,7 @@ export class IsoScene extends Phaser.Scene {
 
   // ── Coordinate helpers ────────────────────────────────────────
 
-  /** Convert grid coords to world-space screen position (center of diamond) */
+  /** Convert grid coords to world-space screen position (top point of diamond) */
   private gridToScreen(gx: number, gy: number): { x: number; y: number } {
     return cartToIso(gx, gy, SCALED_TILE_W, SCALED_TILE_H);
   }
@@ -302,44 +308,57 @@ export class IsoScene extends Phaser.Scene {
     this.tileImages = [];
     this.decorationImages = [];
 
+    // Pass 1: Draw all floors first (lowest depth layer)
     for (let row = 0; row < MAP_ROWS; row++) {
       this.tileImages[row] = [];
       for (let col = 0; col < MAP_COLS; col++) {
         const cellType = MAP_DATA[row][col];
         const { x, y } = this.gridToScreen(col, row);
+        const sx = Math.round(x);
+        const sy = Math.round(y);
 
-        if (cellType === 1) {
-          // Plain wall
-          const wallImg = this.add.image(x, y, 'tile-wall-plain');
-          wallImg.setScale(ZOOM);
-          wallImg.setOrigin(0.5, 0.75);
-          wallImg.setDepth(row + col);
-          this.tileImages[row][col] = wallImg;
-        } else if (cellType === 2) {
-          // Window wall
-          const wallImg = this.add.image(x, y, 'tile-wall-window');
-          wallImg.setScale(ZOOM);
-          wallImg.setOrigin(0.5, 0.75);
-          wallImg.setDepth(row + col);
-          this.tileImages[row][col] = wallImg;
-        } else {
-          // Floor tile (all walkable or decorated cells get floor underneath)
-          const floorImg = this.add.image(x, y, FLOOR_KEY);
+        if (cellType === 1 || cellType === 2) {
+          // Wall tiles — draw floor underneath for seamless ground, then wall on top
+          const floorImg = this.add.image(sx, sy, FLOOR_KEY);
           floorImg.setScale(ZOOM);
-          floorImg.setOrigin(0.5, 0.5);
+          floorImg.setOrigin(0.5, 0);
           floorImg.setDepth(row + col);
           this.tileImages[row][col] = floorImg;
 
-          // Decoration on top of the floor
-          const decoKey = DECO_KEY[cellType];
-          if (decoKey) {
-            const decoImg = this.add.image(x, y - 8 * ZOOM, decoKey);
-            decoImg.setScale(ZOOM);
-            decoImg.setOrigin(0.5, 0.5);
-            decoImg.setDepth(row + col + 0.5);
-            this.decorationImages.push(decoImg);
-          }
+          const wallKey = cellType === 1 ? 'tile-wall-plain' : 'tile-wall-window';
+          const wallImg = this.add.image(sx, sy, wallKey);
+          wallImg.setScale(ZOOM);
+          wallImg.setOrigin(0.5, 0.5);
+          wallImg.setDepth(row + col + 0.3);
+          this.decorationImages.push(wallImg);
+        } else {
+          // Floor tile (all walkable or decorated cells get floor)
+          const floorImg = this.add.image(sx, sy, FLOOR_KEY);
+          floorImg.setScale(ZOOM);
+          floorImg.setOrigin(0.5, 0);
+          floorImg.setDepth(row + col);
+          this.tileImages[row][col] = floorImg;
         }
+      }
+    }
+
+    // Pass 2: Draw decorations on top of floors (back-to-front)
+    for (let row = 0; row < MAP_ROWS; row++) {
+      for (let col = 0; col < MAP_COLS; col++) {
+        const cellType = MAP_DATA[row][col];
+        const decoKey = DECO_KEY[cellType];
+        if (!decoKey) continue;
+
+        const { x, y } = this.gridToScreen(col, row);
+        const sx = Math.round(x);
+        const sy = Math.round(y);
+
+        const decoImg = this.add.image(sx, sy, decoKey);
+        decoImg.setScale(ZOOM);
+        // Decorations: origin (0.5, 0.5) shifts up by TILE_H like walls in fyso_world
+        decoImg.setOrigin(0.5, 0.5);
+        decoImg.setDepth(row + col + 0.5);
+        this.decorationImages.push(decoImg);
       }
     }
   }
@@ -348,9 +367,16 @@ export class IsoScene extends Phaser.Scene {
 
   private createCharacter(): void {
     const { x, y } = this.gridToScreen(this.charGridX, this.charGridY);
-    this.characterSprite = this.add.sprite(x, y, 'char_0', 0);
+    // Position character at diamond center (top point + half tile height)
+    // Origin (0.5, 1.0) = bottom-center of sprite aligned to diamond center
+    this.characterSprite = this.add.sprite(
+      Math.round(x),
+      Math.round(y + SCALED_TILE_H / 2),
+      'char_0',
+      0,
+    );
     this.characterSprite.setScale(CHAR_SCALE);
-    this.characterSprite.setOrigin(0.5, 0.8);
+    this.characterSprite.setOrigin(0.5, 1.0);
     this.updateCharacterDepth();
     this.characterSprite.play('char-idle-south');
   }
@@ -360,7 +386,7 @@ export class IsoScene extends Phaser.Scene {
   }
 
   private positionCharacter(screenX: number, screenY: number): void {
-    this.characterSprite.setPosition(screenX, screenY);
+    this.characterSprite.setPosition(Math.round(screenX), Math.round(screenY));
   }
 
   /** Determine direction from movement delta and apply sprite flip */
@@ -446,14 +472,13 @@ export class IsoScene extends Phaser.Scene {
   ): void {
     const { x, y } = this.gridToScreen(col, row);
     const hw = SCALED_TILE_W / 2;
-    const hh = SCALED_TILE_H / 2;
-
+    // gridToScreen returns top point of diamond; diamond spans from y to y + SCALED_TILE_H
     graphics.fillStyle(color, alpha);
     graphics.beginPath();
-    graphics.moveTo(x, y - hh);
-    graphics.lineTo(x + hw, y);
-    graphics.lineTo(x, y + hh);
-    graphics.lineTo(x - hw, y);
+    graphics.moveTo(x, y);                         // top
+    graphics.lineTo(x + hw, y + SCALED_TILE_H / 2); // right
+    graphics.lineTo(x, y + SCALED_TILE_H);          // bottom
+    graphics.lineTo(x - hw, y + SCALED_TILE_H / 2); // left
     graphics.closePath();
     graphics.fillPath();
   }
@@ -462,23 +487,22 @@ export class IsoScene extends Phaser.Scene {
     this.hoverHighlight.clear();
     const { x, y } = this.gridToScreen(col, row);
     const hw = SCALED_TILE_W / 2;
-    const hh = SCALED_TILE_H / 2;
-
+    // gridToScreen returns top point of diamond
     this.hoverHighlight.lineStyle(2, HOVER_COLOR, 0.8);
     this.hoverHighlight.beginPath();
-    this.hoverHighlight.moveTo(x, y - hh);
-    this.hoverHighlight.lineTo(x + hw, y);
-    this.hoverHighlight.lineTo(x, y + hh);
-    this.hoverHighlight.lineTo(x - hw, y);
+    this.hoverHighlight.moveTo(x, y);
+    this.hoverHighlight.lineTo(x + hw, y + SCALED_TILE_H / 2);
+    this.hoverHighlight.lineTo(x, y + SCALED_TILE_H);
+    this.hoverHighlight.lineTo(x - hw, y + SCALED_TILE_H / 2);
     this.hoverHighlight.closePath();
     this.hoverHighlight.strokePath();
 
     this.hoverHighlight.fillStyle(HOVER_COLOR, 0.15);
     this.hoverHighlight.beginPath();
-    this.hoverHighlight.moveTo(x, y - hh);
-    this.hoverHighlight.lineTo(x + hw, y);
-    this.hoverHighlight.lineTo(x, y + hh);
-    this.hoverHighlight.lineTo(x - hw, y);
+    this.hoverHighlight.moveTo(x, y);
+    this.hoverHighlight.lineTo(x + hw, y + SCALED_TILE_H / 2);
+    this.hoverHighlight.lineTo(x, y + SCALED_TILE_H);
+    this.hoverHighlight.lineTo(x - hw, y + SCALED_TILE_H / 2);
     this.hoverHighlight.closePath();
     this.hoverHighlight.fillPath();
   }
@@ -566,15 +590,17 @@ export class IsoScene extends Phaser.Scene {
 
     const from = this.gridToScreen(this.charGridX, this.charGridY);
     const to = this.gridToScreen(next.x, next.y);
+    // Character stands at diamond center (top point + half tile height)
+    const charOffsetY = SCALED_TILE_H / 2;
 
     // Duration from MOVE_SPEED (tiles/second)
     const stepDuration = (1 / MOVE_SPEED) * 1000;
-    const tweenTarget = { x: from.x, y: from.y };
+    const tweenTarget = { x: from.x, y: from.y + charOffsetY };
 
     this.tweens.add({
       targets: tweenTarget,
       x: to.x,
-      y: to.y,
+      y: to.y + charOffsetY,
       duration: stepDuration,
       ease: 'Linear',
       onUpdate: () => {
@@ -584,7 +610,7 @@ export class IsoScene extends Phaser.Scene {
         this.charGridX = next.x;
         this.charGridY = next.y;
         const pos = this.gridToScreen(this.charGridX, this.charGridY);
-        this.positionCharacter(pos.x, pos.y);
+        this.positionCharacter(pos.x, pos.y + charOffsetY);
         this.updateCharacterDepth();
         this.moveAlongPath(remaining);
       },
