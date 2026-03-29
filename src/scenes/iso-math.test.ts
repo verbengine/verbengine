@@ -83,3 +83,78 @@ describe('round-trip conversion', () => {
     });
   }
 });
+
+describe('screen-to-tile conversion with map offset', () => {
+  // Simulates the IsoScene screenToGrid logic:
+  // 1. Subtract offset to get relative coords
+  // 2. Run isoToCart to get fractional tile coords
+  // 3. Floor to get tile indices
+  const OFFSET_X = 480; // canvas width / 2
+  const OFFSET_Y = 80;
+
+  function screenToTile(
+    sx: number,
+    sy: number,
+  ): { col: number; row: number } | null {
+    const relX = sx - OFFSET_X;
+    const relY = sy - OFFSET_Y;
+    const cart = isoToCart(relX, relY, TILE_W, TILE_H);
+    const col = Math.floor(cart.x);
+    const row = Math.floor(cart.y);
+    if (col < 0 || col >= 10 || row < 0 || row >= 10) return null;
+    return { col, row };
+  }
+
+  it('clicking the center of tile (0,0) returns (0,0)', () => {
+    // Tile (0,0) center is at screen (OFFSET_X, OFFSET_Y)
+    const result = screenToTile(OFFSET_X, OFFSET_Y);
+    expect(result).toEqual({ col: 0, row: 0 });
+  });
+
+  it('clicking the center of tile (1,0) returns (1,0)', () => {
+    const iso = cartToIso(1, 0, TILE_W, TILE_H);
+    const result = screenToTile(iso.x + OFFSET_X, iso.y + OFFSET_Y);
+    expect(result).toEqual({ col: 1, row: 0 });
+  });
+
+  it('clicking the center of tile (0,1) returns (0,1)', () => {
+    const iso = cartToIso(0, 1, TILE_W, TILE_H);
+    const result = screenToTile(iso.x + OFFSET_X, iso.y + OFFSET_Y);
+    expect(result).toEqual({ col: 0, row: 1 });
+  });
+
+  it('clicking the center of tile (5,5) returns (5,5)', () => {
+    const iso = cartToIso(5, 5, TILE_W, TILE_H);
+    const result = screenToTile(iso.x + OFFSET_X, iso.y + OFFSET_Y);
+    expect(result).toEqual({ col: 5, row: 5 });
+  });
+
+  it('clicking the center of tile (9,9) returns (9,9)', () => {
+    const iso = cartToIso(9, 9, TILE_W, TILE_H);
+    const result = screenToTile(iso.x + OFFSET_X, iso.y + OFFSET_Y);
+    expect(result).toEqual({ col: 9, row: 9 });
+  });
+
+  it('clicking slightly inside tile (3,2) still returns (3,2)', () => {
+    const iso = cartToIso(3, 2, TILE_W, TILE_H);
+    // Offset by 1 pixel from center — safely within the same tile
+    const result = screenToTile(iso.x + OFFSET_X + 1, iso.y + OFFSET_Y + 1);
+    expect(result).toEqual({ col: 3, row: 2 });
+  });
+
+  it('returns null for clicks outside the map bounds', () => {
+    // Click far to the left — negative col
+    const result = screenToTile(0, 80);
+    expect(result).toBeNull();
+  });
+
+  it('every tile center maps back to its own tile', () => {
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        const iso = cartToIso(col, row, TILE_W, TILE_H);
+        const result = screenToTile(iso.x + OFFSET_X, iso.y + OFFSET_Y);
+        expect(result).toEqual({ col, row });
+      }
+    }
+  });
+});

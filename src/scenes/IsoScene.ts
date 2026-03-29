@@ -27,17 +27,23 @@ const WALL_COLOR = 0x555555;  // dark gray
 const CHAR_COLOR = 0x3366ff;  // blue
 const TARGET_COLOR = 0xffff00; // yellow highlight
 const BLOCKED_COLOR = 0xff3333; // red flash for blocked
+const HOVER_COLOR = 0xffffff;   // white outline for hover
 
 export class IsoScene extends Phaser.Scene {
   private tileGraphics!: Phaser.GameObjects.Graphics;
   private character!: Phaser.GameObjects.Graphics;
   private targetHighlight!: Phaser.GameObjects.Graphics;
+  private hoverHighlight!: Phaser.GameObjects.Graphics;
 
   /** Current character position in grid coords */
   private charGridX = 1;
   private charGridY = 1;
 
-  /** Offset to center the map on screen */
+  /** Tracked hover tile for avoiding redundant redraws */
+  private hoverCol = -1;
+  private hoverRow = -1;
+
+  /** Offset to center the map on screen — this is where tile (0,0) center renders */
   private offsetX = 0;
   private offsetY = 0;
 
@@ -56,6 +62,7 @@ export class IsoScene extends Phaser.Scene {
     this.drawMap();
     this.createCharacter();
     this.createTargetHighlight();
+    this.createHoverHighlight();
     this.setupInput();
 
     // Back button
@@ -182,6 +189,11 @@ export class IsoScene extends Phaser.Scene {
     this.targetHighlight.setDepth(-1);
   }
 
+  private createHoverHighlight(): void {
+    this.hoverHighlight = this.add.graphics();
+    this.hoverHighlight.setDepth(-1);
+  }
+
   private showTargetHighlight(col: number, row: number, color: number): void {
     this.targetHighlight.clear();
     this.drawHighlightDiamond(col, row, color);
@@ -207,6 +219,37 @@ export class IsoScene extends Phaser.Scene {
     this.targetHighlight.fillPath();
   }
 
+  private drawHoverHighlight(col: number, row: number): void {
+    this.hoverHighlight.clear();
+    const { x, y } = this.gridToScreen(col, row);
+    const hw = TILE_WIDTH / 2;
+    const hh = TILE_HEIGHT / 2;
+
+    this.hoverHighlight.lineStyle(2, HOVER_COLOR, 0.8);
+    this.hoverHighlight.beginPath();
+    this.hoverHighlight.moveTo(x, y - hh);
+    this.hoverHighlight.lineTo(x + hw, y);
+    this.hoverHighlight.lineTo(x, y + hh);
+    this.hoverHighlight.lineTo(x - hw, y);
+    this.hoverHighlight.closePath();
+    this.hoverHighlight.strokePath();
+
+    this.hoverHighlight.fillStyle(HOVER_COLOR, 0.15);
+    this.hoverHighlight.beginPath();
+    this.hoverHighlight.moveTo(x, y - hh);
+    this.hoverHighlight.lineTo(x + hw, y);
+    this.hoverHighlight.lineTo(x, y + hh);
+    this.hoverHighlight.lineTo(x - hw, y);
+    this.hoverHighlight.closePath();
+    this.hoverHighlight.fillPath();
+  }
+
+  private clearHoverHighlight(): void {
+    this.hoverHighlight.clear();
+    this.hoverCol = -1;
+    this.hoverRow = -1;
+  }
+
   private setupInput(): void {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.isMoving) return;
@@ -227,6 +270,23 @@ export class IsoScene extends Phaser.Scene {
 
       this.showTargetHighlight(col, row, TARGET_COLOR);
       this.findAndMoveTo(col, row);
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      const grid = this.screenToGrid(pointer.x, pointer.y);
+      if (!grid) {
+        this.clearHoverHighlight();
+        return;
+      }
+
+      const { col, row } = grid;
+
+      // Skip redraw if still hovering the same tile
+      if (col === this.hoverCol && row === this.hoverRow) return;
+
+      this.hoverCol = col;
+      this.hoverRow = row;
+      this.drawHoverHighlight(col, row);
     });
   }
 
