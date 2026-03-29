@@ -8,30 +8,65 @@ const TILE_HEIGHT = 32;
 const MAP_COLS = 10;
 const MAP_ROWS = 10;
 
-/** 0 = floor (walkable), 1 = wall (blocked) */
+/**
+ * Map cell types:
+ * 0 = stone floor (walkable)
+ * 1 = wall (blocked)
+ * 2 = tiled floor (walkable, visual variant)
+ * 3 = dirt floor (walkable, visual variant)
+ * 4 = planks floor (walkable, visual variant)
+ * 5 = barrel decoration on floor (blocked)
+ * 6 = crate decoration on floor (blocked)
+ * 7 = chest decoration on floor (blocked)
+ * 8 = table decoration on floor (blocked)
+ */
 const MAP_DATA: number[][] = [
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-  [0, 0, 1, 0, 0, 0, 0, 1, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 1, 0, 0, 0, 0, 1, 0, 0],
-  [0, 0, 1, 1, 0, 0, 1, 1, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 2, 2, 0, 0, 3, 3, 1],
+  [1, 0, 5, 0, 0, 0, 8, 3, 0, 1],
+  [1, 2, 0, 0, 0, 0, 0, 0, 0, 1],
+  [1, 2, 0, 0, 4, 4, 0, 0, 0, 1],
+  [1, 0, 0, 0, 4, 4, 0, 0, 6, 1],
+  [1, 0, 7, 0, 0, 0, 0, 0, 0, 1],
+  [1, 3, 0, 0, 0, 0, 0, 2, 0, 1],
+  [1, 3, 0, 0, 0, 0, 5, 2, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
-const FLOOR_COLOR = 0xc2b280; // tan
-const WALL_COLOR = 0x555555;  // dark gray
-const CHAR_COLOR = 0x3366ff;  // blue
-const TARGET_COLOR = 0xffff00; // yellow highlight
-const BLOCKED_COLOR = 0xff3333; // red flash for blocked
-const HOVER_COLOR = 0xffffff;   // white outline for hover
+/** Tiles that are walkable (pathfinder acceptable tiles) */
+const WALKABLE_TILES = [0, 2, 3, 4];
+
+/** Map cell type to floor texture key */
+const FLOOR_TEXTURE_MAP: Record<number, string> = {
+  0: 'tile-floor-stone',
+  2: 'tile-floor-stone-tile',
+  3: 'tile-floor-dirt',
+  4: 'tile-floor-planks',
+};
+
+/** Map cell type to decoration texture key (rendered on top of floor) */
+const DECORATION_TEXTURE_MAP: Record<number, string> = {
+  5: 'tile-barrel',
+  6: 'tile-crate',
+  7: 'tile-chest',
+  8: 'tile-table',
+};
+
+const TARGET_COLOR = 0xffff00;
+const BLOCKED_COLOR = 0xff3333;
+const HOVER_COLOR = 0xffffff;
+
+/**
+ * Scale factor for Kenney tiles (256x512 originals).
+ * At 0.25 scale, tiles become 64x128 on screen.
+ * The isometric diamond footprint is 64x32 which matches TILE_WIDTH x TILE_HEIGHT.
+ */
+const TILE_SCALE = 0.25;
 
 export class IsoScene extends Phaser.Scene {
-  private tileGraphics!: Phaser.GameObjects.Graphics;
-  private character!: Phaser.GameObjects.Graphics;
+  private tileImages: Phaser.GameObjects.Image[][] = [];
+  private decorationImages: Phaser.GameObjects.Image[] = [];
+  private characterSprite!: Phaser.GameObjects.Image;
   private targetHighlight!: Phaser.GameObjects.Graphics;
   private hoverHighlight!: Phaser.GameObjects.Graphics;
 
@@ -43,7 +78,7 @@ export class IsoScene extends Phaser.Scene {
   private hoverCol = -1;
   private hoverRow = -1;
 
-  /** Offset to center the map on screen — this is where tile (0,0) center renders */
+  /** Offset to center the map on screen */
   private offsetX = 0;
   private offsetY = 0;
 
@@ -54,7 +89,29 @@ export class IsoScene extends Phaser.Scene {
     super({ key: 'IsoScene' });
   }
 
+  preload(): void {
+    // Floor tiles
+    this.load.image('tile-floor-stone', '/assets/tiles/floor-stone.png');
+    this.load.image('tile-floor-stone-tile', '/assets/tiles/floor-stone-tile.png');
+    this.load.image('tile-floor-dirt', '/assets/tiles/floor-dirt.png');
+    this.load.image('tile-floor-planks', '/assets/tiles/floor-planks.png');
+
+    // Wall tile
+    this.load.image('tile-wall', '/assets/tiles/wall-stone.png');
+
+    // Decorations
+    this.load.image('tile-barrel', '/assets/tiles/barrel.png');
+    this.load.image('tile-crate', '/assets/tiles/crate.png');
+    this.load.image('tile-chest', '/assets/tiles/chest.png');
+    this.load.image('tile-table', '/assets/tiles/table.png');
+
+    // Character
+    this.load.image('hero-idle', '/assets/characters/hero-idle.png');
+  }
+
   create(): void {
+    this.cameras.main.setBackgroundColor('#1a1a2e');
+
     this.offsetX = Number(this.game.config.width) / 2;
     this.offsetY = 80;
 
@@ -80,7 +137,7 @@ export class IsoScene extends Phaser.Scene {
       });
 
     // Title
-    this.add.text(Number(this.game.config.width) / 2, 16, 'Isometric Pathfinding Spike', {
+    this.add.text(Number(this.game.config.width) / 2, 16, 'Isometric Dungeon', {
       fontFamily: 'monospace',
       fontSize: '18px',
       color: '#ffffff',
@@ -97,12 +154,12 @@ export class IsoScene extends Phaser.Scene {
   private setupPathfinder(): void {
     this.easystar = new EasyStar.js();
     this.easystar.setGrid(MAP_DATA);
-    this.easystar.setAcceptableTiles([0]);
+    this.easystar.setAcceptableTiles(WALKABLE_TILES);
     this.easystar.enableDiagonals();
     this.easystar.enableCornerCutting();
   }
 
-  /** Convert grid coords to screen position (center of tile) */
+  /** Convert grid coords to screen position (center of tile diamond) */
   private gridToScreen(gx: number, gy: number): { x: number; y: number } {
     const iso = cartToIso(gx, gy, TILE_WIDTH, TILE_HEIGHT);
     return {
@@ -126,97 +183,99 @@ export class IsoScene extends Phaser.Scene {
   }
 
   private drawMap(): void {
-    this.tileGraphics = this.add.graphics();
+    this.tileImages = [];
+    this.decorationImages = [];
 
     for (let row = 0; row < MAP_ROWS; row++) {
+      this.tileImages[row] = [];
       for (let col = 0; col < MAP_COLS; col++) {
-        const isWall = MAP_DATA[row][col] === 1;
-        const color = isWall ? WALL_COLOR : FLOOR_COLOR;
-        this.drawDiamond(this.tileGraphics, col, row, color, isWall ? 0.9 : 0.7);
+        const cellType = MAP_DATA[row][col];
+        const { x, y } = this.gridToScreen(col, row);
+
+        if (cellType === 1) {
+          // Wall tile
+          const wallImg = this.add.image(x, y, 'tile-wall');
+          wallImg.setScale(TILE_SCALE);
+          wallImg.setOrigin(0.5, 0.75);
+          wallImg.setDepth(row + col);
+          this.tileImages[row][col] = wallImg;
+        } else {
+          // Floor tile (pick texture based on cell type)
+          const textureKey = FLOOR_TEXTURE_MAP[cellType] ?? 'tile-floor-stone';
+          const floorImg = this.add.image(x, y, textureKey);
+          floorImg.setScale(TILE_SCALE);
+          floorImg.setOrigin(0.5, 0.75);
+          floorImg.setDepth(row + col);
+          this.tileImages[row][col] = floorImg;
+
+          // Decoration on top of floor
+          const decoKey = DECORATION_TEXTURE_MAP[cellType];
+          if (decoKey) {
+            const decoImg = this.add.image(x, y, decoKey);
+            decoImg.setScale(TILE_SCALE);
+            decoImg.setOrigin(0.5, 0.75);
+            decoImg.setDepth(row + col + 0.5);
+            this.decorationImages.push(decoImg);
+          }
+        }
       }
     }
   }
 
-  private drawDiamond(
+  private createCharacter(): void {
+    const { x, y } = this.gridToScreen(this.charGridX, this.charGridY);
+    this.characterSprite = this.add.image(x, y, 'hero-idle');
+    this.characterSprite.setScale(TILE_SCALE);
+    this.characterSprite.setOrigin(0.5, 0.85);
+    this.updateCharacterDepth();
+  }
+
+  private updateCharacterDepth(): void {
+    this.characterSprite.setDepth(this.charGridY + this.charGridX + 0.8);
+  }
+
+  private positionCharacter(screenX: number, screenY: number): void {
+    this.characterSprite.setPosition(screenX, screenY);
+  }
+
+  private createTargetHighlight(): void {
+    this.targetHighlight = this.add.graphics();
+    this.targetHighlight.setDepth(1000);
+  }
+
+  private createHoverHighlight(): void {
+    this.hoverHighlight = this.add.graphics();
+    this.hoverHighlight.setDepth(999);
+  }
+
+  private showTargetHighlight(col: number, row: number, color: number): void {
+    this.targetHighlight.clear();
+    this.drawHighlightDiamond(this.targetHighlight, col, row, color, 0.4);
+
+    this.time.delayedCall(400, () => {
+      this.targetHighlight.clear();
+    });
+  }
+
+  private drawHighlightDiamond(
     graphics: Phaser.GameObjects.Graphics,
     col: number,
     row: number,
-    fillColor: number,
+    color: number,
     alpha: number,
   ): void {
     const { x, y } = this.gridToScreen(col, row);
     const hw = TILE_WIDTH / 2;
     const hh = TILE_HEIGHT / 2;
 
-    graphics.fillStyle(fillColor, alpha);
-    graphics.beginPath();
-    graphics.moveTo(x, y - hh);      // top
-    graphics.lineTo(x + hw, y);      // right
-    graphics.lineTo(x, y + hh);      // bottom
-    graphics.lineTo(x - hw, y);      // left
-    graphics.closePath();
-    graphics.fillPath();
-
-    // Outline
-    graphics.lineStyle(1, 0x000000, 0.3);
+    graphics.fillStyle(color, alpha);
     graphics.beginPath();
     graphics.moveTo(x, y - hh);
     graphics.lineTo(x + hw, y);
     graphics.lineTo(x, y + hh);
     graphics.lineTo(x - hw, y);
     graphics.closePath();
-    graphics.strokePath();
-  }
-
-  private createCharacter(): void {
-    this.character = this.add.graphics();
-    this.drawCharacter();
-  }
-
-  private drawCharacter(): void {
-    this.character.clear();
-    const { x, y } = this.gridToScreen(this.charGridX, this.charGridY);
-    // Draw a filled circle for the character
-    this.character.fillStyle(CHAR_COLOR, 1);
-    this.character.fillCircle(x, y - 6, 10);
-    // Small shadow ellipse
-    this.character.fillStyle(0x000000, 0.25);
-    this.character.fillEllipse(x, y + 2, 16, 6);
-  }
-
-  private createTargetHighlight(): void {
-    this.targetHighlight = this.add.graphics();
-    this.targetHighlight.setDepth(-1);
-  }
-
-  private createHoverHighlight(): void {
-    this.hoverHighlight = this.add.graphics();
-    this.hoverHighlight.setDepth(-1);
-  }
-
-  private showTargetHighlight(col: number, row: number, color: number): void {
-    this.targetHighlight.clear();
-    this.drawHighlightDiamond(col, row, color);
-
-    // Fade out after a short time
-    this.time.delayedCall(400, () => {
-      this.targetHighlight.clear();
-    });
-  }
-
-  private drawHighlightDiamond(col: number, row: number, color: number): void {
-    const { x, y } = this.gridToScreen(col, row);
-    const hw = TILE_WIDTH / 2;
-    const hh = TILE_HEIGHT / 2;
-
-    this.targetHighlight.fillStyle(color, 0.4);
-    this.targetHighlight.beginPath();
-    this.targetHighlight.moveTo(x, y - hh);
-    this.targetHighlight.lineTo(x + hw, y);
-    this.targetHighlight.lineTo(x, y + hh);
-    this.targetHighlight.lineTo(x - hw, y);
-    this.targetHighlight.closePath();
-    this.targetHighlight.fillPath();
+    graphics.fillPath();
   }
 
   private drawHoverHighlight(col: number, row: number): void {
@@ -258,9 +317,10 @@ export class IsoScene extends Phaser.Scene {
       if (!grid) return;
 
       const { col, row } = grid;
+      const cellType = MAP_DATA[row][col];
 
-      // Check if wall
-      if (MAP_DATA[row][col] === 1) {
+      // Check if blocked (wall or decoration)
+      if (!WALKABLE_TILES.includes(cellType)) {
         this.showTargetHighlight(col, row, BLOCKED_COLOR);
         return;
       }
@@ -281,7 +341,6 @@ export class IsoScene extends Phaser.Scene {
 
       const { col, row } = grid;
 
-      // Skip redraw if still hovering the same tile
       if (col === this.hoverCol && row === this.hoverRow) return;
 
       this.hoverCol = col;
@@ -298,7 +357,6 @@ export class IsoScene extends Phaser.Scene {
       targetRow,
       (path) => {
         if (!path || path.length < 2) return;
-        // path[0] is current position, skip it
         this.moveAlongPath(path.slice(1));
       },
     );
@@ -318,7 +376,6 @@ export class IsoScene extends Phaser.Scene {
     const from = this.gridToScreen(this.charGridX, this.charGridY);
     const to = this.gridToScreen(next.x, next.y);
 
-    // Use a tween on a temporary object to animate position
     const tweenTarget = { x: from.x, y: from.y };
 
     this.tweens.add({
@@ -328,18 +385,14 @@ export class IsoScene extends Phaser.Scene {
       duration: 180,
       ease: 'Linear',
       onUpdate: () => {
-        this.character.clear();
-        // Shadow
-        this.character.fillStyle(0x000000, 0.25);
-        this.character.fillEllipse(tweenTarget.x, tweenTarget.y + 2, 16, 6);
-        // Character
-        this.character.fillStyle(CHAR_COLOR, 1);
-        this.character.fillCircle(tweenTarget.x, tweenTarget.y - 6, 10);
+        this.positionCharacter(tweenTarget.x, tweenTarget.y);
       },
       onComplete: () => {
         this.charGridX = next.x;
         this.charGridY = next.y;
-        this.drawCharacter();
+        const pos = this.gridToScreen(this.charGridX, this.charGridY);
+        this.positionCharacter(pos.x, pos.y);
+        this.updateCharacterDepth();
         this.moveAlongPath(remaining);
       },
     });
