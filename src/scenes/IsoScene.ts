@@ -114,6 +114,14 @@ const DECO_KEY: Record<number, string> = {
   6: 'tile-barrel',
 };
 
+/** Decoration scale multipliers — taller objects get larger scale */
+const DECO_SCALE: Record<number, number> = {
+  3: ZOOM,             // desk — same as floor
+  4: ZOOM,             // chair — same as floor
+  5: ZOOM * 2.5,       // bookshelf — tall
+  6: ZOOM * 2.0,       // barrel — medium
+};
+
 const TARGET_COLOR = 0xffff00;
 const BLOCKED_COLOR = 0xff3333;
 const HOVER_COLOR = 0xffffff;
@@ -326,9 +334,9 @@ export class IsoScene extends Phaser.Scene {
           this.tileImages[row][col] = floorImg;
 
           const wallKey = cellType === 1 ? 'tile-wall-plain' : 'tile-wall-window';
-          const wallImg = this.add.image(sx, sy, wallKey);
+          const wallImg = this.add.image(sx, sy + SCALED_TILE_H, wallKey);
           wallImg.setScale(ZOOM);
-          wallImg.setOrigin(0.5, 0.5);
+          wallImg.setOrigin(0.5, 1.0);
           wallImg.setDepth(row + col + 0.3);
           this.decorationImages.push(wallImg);
         } else {
@@ -353,10 +361,10 @@ export class IsoScene extends Phaser.Scene {
         const sx = Math.round(x);
         const sy = Math.round(y);
 
-        const decoImg = this.add.image(sx, sy, decoKey);
-        decoImg.setScale(ZOOM);
-        // Decorations: origin (0.5, 0.5) shifts up by TILE_H like walls in fyso_world
-        decoImg.setOrigin(0.5, 0.5);
+        const decoImg = this.add.image(sx, sy + SCALED_TILE_H / 2, decoKey);
+        decoImg.setScale(DECO_SCALE[cellType] ?? ZOOM);
+        // Origin at bottom-center so decoration "stands" on the tile
+        decoImg.setOrigin(0.5, 0.85);
         decoImg.setDepth(row + col + 0.5);
         this.decorationImages.push(decoImg);
       }
@@ -588,10 +596,16 @@ export class IsoScene extends Phaser.Scene {
       this.characterSprite.play(walkKey);
     }
 
-    const from = this.gridToScreen(this.charGridX, this.charGridY);
+    const fromGridX = this.charGridX;
+    const fromGridY = this.charGridY;
+    const from = this.gridToScreen(fromGridX, fromGridY);
     const to = this.gridToScreen(next.x, next.y);
     // Character stands at diamond center (top point + half tile height)
     const charOffsetY = SCALED_TILE_H / 2;
+
+    // Depth values for interpolation during movement
+    const fromDepth = fromGridY + fromGridX;
+    const toDepth = next.y + next.x;
 
     // Duration from MOVE_SPEED (tiles/second)
     const stepDuration = (1 / MOVE_SPEED) * 1000;
@@ -603,8 +617,13 @@ export class IsoScene extends Phaser.Scene {
       y: to.y + charOffsetY,
       duration: stepDuration,
       ease: 'Linear',
-      onUpdate: () => {
+      onUpdate: (_tween: Phaser.Tweens.Tween, _target: unknown, _key: string, _current: number, _start: number, _end: number) => {
         this.positionCharacter(tweenTarget.x, tweenTarget.y);
+        // Interpolate depth based on tween progress so the character
+        // sorts correctly against walls/decorations mid-step
+        const progress = _tween.progress;
+        const currentDepth = fromDepth + (toDepth - fromDepth) * progress + 0.8;
+        this.characterSprite.setDepth(currentDepth);
       },
       onComplete: () => {
         this.charGridX = next.x;
