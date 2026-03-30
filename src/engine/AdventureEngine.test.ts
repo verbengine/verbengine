@@ -399,6 +399,77 @@ describe('AdventureEngine', () => {
     expect(cb2).toHaveBeenCalledOnce();
   });
 
+  // --- Interaction events ---
+
+  it('should fire interaction event on hotspot default use', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactHotspot('escritorio_ana');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('use');
+    expect(event.targetId).toBe('escritorio_ana');
+    expect(event.text).toBe('Nothing useful here... just papers.');
+  });
+
+  it('should fire interaction event on hotspot take', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactHotspot('cafetera');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('take');
+    expect(event.targetId).toBe('cafetera');
+    expect(event.actions).toEqual([
+      { type: 'get', target: 'usb_drive' },
+      { type: 'remove_hotspot', target: 'cafetera' },
+    ]);
+  });
+
+  it('should fire interaction event with condition on hotspot use(item)', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    engine.executeActions([{ type: 'get', target: 'server_key' }]);
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactHotspot('escritorio_ana', 'server_key');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('use');
+    expect(event.condition).toEqual({ type: 'has', target: 'server_key', result: true });
+  });
+
+  it('should fire interaction event on character talk', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactCharacter('ana');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('talk');
+    expect(event.targetId).toBe('ana');
+  });
+
+  it('should fire interaction event on exit', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactExit('pasillo_norte');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('exit');
+    expect(event.targetId).toBe('pasillo_norte');
+  });
+
+  it('should not fire interaction event when interact returns null', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.interactHotspot('nonexistent');
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   // --- Queries ---
 
   it('should return hotspot by id', () => {
