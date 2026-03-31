@@ -1,0 +1,247 @@
+adventure "The Phantom Code" {
+  start: recepcion
+
+  items {
+    badge_visitante {
+      name: "Visitor Badge"
+      description: "A temporary access badge. It says 'VISITOR' in red letters."
+    }
+    cafe {
+      name: "Coffee Cup"
+      description: "A steaming cup of black coffee. Extra strong."
+    }
+    pendrive {
+      name: "USB Drive"
+      description: "A small encrypted USB drive found in the CEO's plant."
+    }
+    llave_deposito {
+      name: "Storage Key"
+      description: "A rusty key with a tag that reads 'B2 - Storage'."
+    }
+    documento_secreto {
+      name: "Secret Document"
+      description: "A printed email chain revealing the data breach cover-up."
+    }
+    password_papel {
+      name: "Password Note"
+      description: "A sticky note with 'admin:phantom42!' written on it."
+    }
+    evidencia_completa {
+      name: "Complete Evidence"
+      description: "The USB drive loaded with the secret document. Enough to blow the whistle."
+    }
+  }
+
+  scene recepcion {
+    map: "recepcion"
+
+    hotspot mostrador [7, 3] {
+      look: "The reception desk. A sign reads 'NovaCorp - Innovation Through Data'."
+      use: "You lean on the counter. Nothing happens."
+    }
+
+    hotspot revista [3, 5] {
+      look: "A pile of tech magazines. One headline reads: 'NovaCorp: The Most Trusted Name in Data Security'."
+      use: "You flip through the pages. Ironic, given why you're here."
+    }
+
+    hotspot planta_recepcion [12, 2] {
+      look: "A fake plastic plant. Very corporate."
+      use: "You dig around the soil. Nothing hidden here."
+    }
+
+    character recepcionista [8, 3] {
+      sprite: "char_1"
+      look: "Maria, the receptionist. She looks bored."
+      talk: "Welcome to NovaCorp. You must be the new consultant. Here's your visitor badge." -> get(badge_visitante)
+      talk(has badge_visitante): "The offices are to the north. Don't wander into restricted areas!"
+      talk(flag talked_to_all): "You look like you've seen a ghost. Everything okay?"
+    }
+
+    exit oficinas [7, 0] {
+      target: oficina_abierta
+      requires: badge_visitante
+      look: "Glass doors leading to the open office area."
+      locked: "The doors need a badge. Talk to the receptionist."
+    }
+  }
+
+  scene oficina_abierta {
+    map: "oficina_abierta"
+
+    hotspot escritorio_dev [4, 5] {
+      look: "A developer's desk. Three monitors, energy drink cans everywhere."
+      use: "You check the monitors. All locked. One has a sticky note on the side..."
+      take: -> get(password_papel) "You peel off the sticky note. It has a password written on it: admin:phantom42!"
+    }
+
+    hotspot escritorio_vacio [10, 5] {
+      look: "An empty desk. The nameplate says 'R. Torres - Security Analyst'. Someone left in a hurry."
+      use: "You search the drawers. Empty. Whoever worked here cleaned out fast."
+    }
+
+    hotspot impresora [13, 8] {
+      look: "A large office printer. The tray is full of uncollected prints."
+      use: "You check the print tray. Mostly boring spreadsheets."
+      use(password_papel): "You use the password to access the print queue history. Someone printed a classified document last week. The job name was 'EVIDENCE_BACKUP'."
+    }
+
+    hotspot maquina_cafe [2, 8] {
+      look: "An espresso machine. The lifeblood of this office."
+      take: -> get(cafe) "You brew yourself a strong coffee. You'll need it."
+    }
+
+    character dev_senior [5, 6] {
+      sprite: "char_2"
+      look: "Lucas, a senior developer. Dark circles under his eyes."
+      talk: "Hey, new here? Be careful what you dig into. The last security analyst... let's just say he left suddenly."
+      talk(has password_papel): "Where did you find that? That's Ricardo's password. He was investigating something before he disappeared..." -> set(knows_about_ricardo)
+      talk(flag knows_about_ricardo): "Ricardo kept saying the CEO's office had evidence. But that floor is restricted. Maybe try the basement first?"
+    }
+
+    character manager [11, 3] {
+      sprite: "char_3"
+      look: "Diana, the engineering manager. Always watching."
+      talk: "Welcome aboard. Focus on your assigned tasks and we'll get along fine."
+      talk(has pendrive): "What's that USB? Where did you find it? ...You should give that to me. For safekeeping."
+      talk(flag has_evidence): "You... you have the document? Please, think about what you're doing. This will destroy the company."
+    }
+
+    exit recepcion_sur [7, 14] {
+      target: recepcion
+      look: "Back to the reception area."
+    }
+
+    exit oficina_ceo [13, 0] {
+      target: oficina_ceo
+      look: "A door with a plaque: 'CEO - A. Vega'. The door is ajar."
+    }
+
+    exit escaleras [0, 7] {
+      target: sotano
+      requires: llave_deposito
+      look: "Stairs leading down to the basement. There's a locked gate."
+      locked: "The basement gate is locked. You need a key."
+    }
+  }
+
+  scene oficina_ceo {
+    map: "oficina_ceo"
+
+    hotspot escritorio_ceo [7, 5] {
+      look: "An imposing mahogany desk. A laptop sits open but locked."
+      use: "The laptop asks for a password."
+      use(password_papel): "You type 'admin:phantom42!'... Access denied. This isn't the right machine for that password."
+    }
+
+    hotspot estanteria_ceo [2, 2] {
+      look: "A bookshelf full of business books. 'The Art of War', 'Good to Great'... cliché."
+      use: "You pull a few books. Nothing hidden behind them."
+    }
+
+    hotspot planta_ceo [12, 3] {
+      look: "A large potted plant. Real, not fake like the ones in the lobby. The soil looks recently disturbed."
+      use: "You dig through the soil carefully..."
+      take: -> get(pendrive) "Hidden in the soil, you find a small USB drive! Someone hid this here deliberately."
+    }
+
+    hotspot cuadro [10, 1] {
+      look: "A large painting of the company founders. Something about their smiles feels... predatory."
+      use: "You lift the painting. Behind it there's a small safe, but it needs a combination. You don't have it."
+    }
+
+    hotspot cajon_ceo [8, 6] {
+      look: "The CEO's desk drawer. It's slightly open."
+      take: -> get(llave_deposito) "Inside the drawer you find a rusty key with a tag: 'B2 - Storage'."
+    }
+
+    character ceo [7, 3] {
+      sprite: "char_0"
+      look: "Alejandro Vega, the CEO. Silver hair, expensive suit. He exudes power."
+      talk: "Ah, the consultant. I trust you'll find everything in order here. NovaCorp has nothing to hide."
+      talk(has pendrive): "Where did you... That's company property. I suggest you return it immediately."
+      talk(has documento_secreto): "You don't understand what you're dealing with. That information could cause... irreparable damage. To everyone."
+    }
+
+    exit oficina_abierta_sur [7, 9] {
+      target: oficina_abierta
+      look: "Back to the open office."
+    }
+  }
+
+  scene sotano {
+    map: "sotano"
+
+    hotspot servidor_viejo [4, 3] {
+      look: "An old server rack. Most units are powered off, but one blinks with activity."
+      use: "The active server is locked behind a cage."
+      use(password_papel): "You try the password on the server terminal: 'admin:phantom42!' ... ACCESS GRANTED. It's Ricardo's backup server!" -> set(accessed_server)
+    }
+
+    hotspot terminal [5, 4] {
+      look: "A dusty terminal connected to the old server."
+      use: "The terminal is dark. The server needs to be accessed first."
+      use(pendrive): "You insert the USB drive into the terminal." -> set(pendrive_inserted)
+    }
+
+    hotspot archivero [9, 3] {
+      look: "Metal filing cabinets. Most drawers are empty."
+      use: "You search through the cabinets. Old receipts, equipment logs..."
+      use(pendrive): "This isn't the right place for the USB drive."
+    }
+
+    hotspot caja_evidencia [9, 7] {
+      look: "A cardboard box labeled 'R. Torres - Personal Effects'. Ricardo's stuff."
+      use: "You search the box. His desk items, a photo of his family..."
+      take: -> get(documento_secreto) "At the bottom, hidden in a folder: a printed email chain between the CEO and the board. They knew about the data breach for months and covered it up!"
+    }
+
+    hotspot computadora_sotano [4, 7] {
+      look: "An old workstation covered in dust."
+      use: "The screen flickers on. It shows a file transfer interface."
+      use(documento_secreto): -> get(evidencia_completa) -> remove(documento_secreto) -> remove(pendrive) "You scan the document and copy it to the USB along with the server logs. You now have complete evidence of the cover-up."
+    }
+
+    character fantasma_ricardo [7, 5] {
+      sprite: "char_2"
+      look: "Wait... is that Ricardo? No, it's just a maintenance worker who looks like him."
+      talk: "Oh, you startled me. Nobody comes down here. I'm just... checking the pipes."
+      talk(has documento_secreto): "You found Ricardo's documents? He was a brave man. He tried to do the right thing. Please, don't let his work be in vain."
+      talk(flag has_evidence): "You have everything you need. The exit to the parking lot is east. A journalist from El Heraldo is waiting there. Go. Now."
+    }
+
+    exit oficina_arriba [0, 5] {
+      target: oficina_abierta
+      look: "Stairs back up to the office."
+    }
+
+    exit estacionamiento [9, 0] {
+      target: estacionamiento
+      requires: evidencia_completa
+      look: "An emergency exit to the parking lot."
+      locked: "You can't leave yet. You need complete evidence before meeting the journalist."
+    }
+  }
+
+  scene estacionamiento {
+    map: "estacionamiento"
+
+    hotspot auto_periodista [7, 5] {
+      look: "A beat-up sedan with press credentials on the dashboard. This must be the journalist's car."
+      use: "You need to hand over the evidence to someone."
+      use(evidencia_completa): -> win "You hand the USB drive to the journalist. 'This is everything,' you say. 'The breach, the cover-up, all of it.' She nods. 'NovaCorp won't be able to hide this anymore.' As you walk away, your phone buzzes. It's Ricardo: 'Thank you. I'm safe. We did it.' THE END."
+    }
+
+    hotspot poste_luz [3, 3] {
+      look: "A flickering street light. It casts long shadows across the parking lot."
+      use: "Just a regular light post."
+    }
+
+    character periodista [8, 5] {
+      sprite: "char_1"
+      look: "Sofia, an investigative journalist from El Heraldo. She looks nervous but determined."
+      talk: "You must be the consultant. Do you have the evidence? Hand it to the car's dashboard reader."
+      talk(has evidencia_completa): "That's it? Give it to me through the car terminal. This will be front page tomorrow."
+    }
+  }
+}

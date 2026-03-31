@@ -1,5 +1,13 @@
 import Phaser from "phaser";
 
+interface GameEntry {
+  id: string;
+  title: string;
+  color: string;
+  verb?: string;
+  scene?: string;
+}
+
 export class MenuScene extends Phaser.Scene {
   private container: HTMLDivElement | null = null;
 
@@ -15,7 +23,7 @@ export class MenuScene extends Phaser.Scene {
     this.removeDOM();
   }
 
-  private buildDOM(): void {
+  private async buildDOM(): Promise<void> {
     this.removeDOM();
 
     const canvas = this.game.canvas;
@@ -30,46 +38,90 @@ export class MenuScene extends Phaser.Scene {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       font-family: monospace;
       color: #e0e0e0;
-      background: rgba(26, 26, 46, 0.95);
+      background: rgba(26, 26, 46, 0.97);
+      overflow-y: auto;
     `;
+
+    const header = document.createElement("div");
+    header.style.cssText = "text-align: center; padding: 30px 0 20px 0;";
 
     const title = document.createElement("h1");
     title.textContent = "VerbEngine";
-    title.style.cssText = "font-size: 36px; margin: 0 0 8px 0; color: #fff; letter-spacing: 2px;";
-    container.appendChild(title);
+    title.style.cssText = "font-size: 32px; margin: 0 0 6px 0; color: #fff; letter-spacing: 2px;";
+    header.appendChild(title);
 
     const subtitle = document.createElement("p");
-    subtitle.textContent = "Isometric point-and-click adventure engine";
-    subtitle.style.cssText = "font-size: 14px; margin: 0 0 40px 0; color: #888;";
-    container.appendChild(subtitle);
+    subtitle.textContent = "Choose your adventure";
+    subtitle.style.cssText = "font-size: 13px; margin: 0; color: #888;";
+    header.appendChild(subtitle);
 
-    const btnStyle = (bg: string) => `
-      padding: 14px 36px; font-size: 16px; font-family: monospace;
-      background: ${bg}; border: none; border-radius: 6px;
-      color: #fff; cursor: pointer; margin: 6px;
+    container.appendChild(header);
+
+    const grid = document.createElement("div");
+    grid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      padding: 10px 24px 30px 24px;
+      max-width: 600px;
+      width: 100%;
     `;
 
-    const adventureBtn = document.createElement("button");
-    adventureBtn.textContent = "Play Adventure";
-    adventureBtn.style.cssText = btnStyle("#9a4aff");
-    adventureBtn.addEventListener("click", () => {
-      this.removeDOM();
-      this.scene.start("AdventureScene");
-    });
-    container.appendChild(adventureBtn);
+    let games: GameEntry[] = [];
+    try {
+      const response = await fetch("/games.json");
+      games = await response.json();
+    } catch {
+      games = [
+        { id: "missing-usb", title: "The Missing USB", color: "#9a4aff", verb: "/dsl/examples/missing-usb/adventure.verb" },
+      ];
+    }
 
-    const isoBtn = document.createElement("button");
-    isoBtn.textContent = "Iso Demo";
-    isoBtn.style.cssText = btnStyle("#2a7a4a");
-    isoBtn.addEventListener("click", () => {
-      this.removeDOM();
-      this.scene.start("IsoScene");
-    });
-    container.appendChild(isoBtn);
+    for (const game of games) {
+      const card = document.createElement("div");
+      card.style.cssText = `
+        background: ${game.color};
+        border-radius: 8px;
+        padding: 16px 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        min-height: 100px;
+        transition: transform 0.15s, box-shadow 0.15s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      `;
 
+      const label = document.createElement("span");
+      label.textContent = game.title;
+      label.style.cssText = "font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5);";
+      card.appendChild(label);
+
+      card.addEventListener("mouseenter", () => {
+        card.style.transform = "scale(1.06)";
+        card.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+      });
+      card.addEventListener("mouseleave", () => {
+        card.style.transform = "scale(1)";
+        card.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+      });
+
+      card.addEventListener("click", () => {
+        this.removeDOM();
+        if (game.scene) {
+          this.scene.start(game.scene);
+        } else if (game.verb) {
+          this.scene.start("AdventureScene", { verbFilePath: game.verb });
+        }
+      });
+
+      grid.appendChild(card);
+    }
+
+    container.appendChild(grid);
     parent.style.position = "relative";
     parent.appendChild(container);
     this.container = container;

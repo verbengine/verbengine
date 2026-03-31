@@ -133,9 +133,17 @@ export class AdventureScene extends Phaser.Scene {
 
   // Verb file path
   private verbFilePath = '/dsl/examples/missing-usb/adventure.verb';
+  private verbBaseDir = '/dsl/examples/missing-usb';
 
   constructor() {
     super({ key: 'AdventureScene' });
+  }
+
+  init(data?: { verbFilePath?: string }): void {
+    if (data?.verbFilePath) {
+      this.verbFilePath = data.verbFilePath;
+      this.verbBaseDir = data.verbFilePath.substring(0, data.verbFilePath.lastIndexOf('/'));
+    }
   }
 
   preload(): void {
@@ -302,7 +310,8 @@ export class AdventureScene extends Phaser.Scene {
     if (!sceneDef) return;
 
     // Load map JSON
-    const mapPath = `/dsl/examples/missing-usb/${sceneDef.map}`;
+    const mapFile = sceneDef.map.endsWith('.json') ? sceneDef.map : `maps/${sceneDef.map}.json`;
+    const mapPath = `${this.verbBaseDir}/${mapFile}`;
     try {
       const response = await fetch(mapPath);
       this.mapData = await response.json() as MapData;
