@@ -15,6 +15,7 @@ import {
   ExitDef,
   GameState,
   HotspotDef,
+  InteractionEvent,
   InteractionResult,
   ItemDef,
   SceneDef,
@@ -23,6 +24,7 @@ import {
 type SceneChangeCallback = (sceneId: string) => void;
 type InventoryChangeCallback = (inventory: string[]) => void;
 type WinCallback = () => void;
+type InteractionCallback = (event: InteractionEvent) => void;
 
 export class AdventureEngine {
   private readonly adventure: AdventureData;
@@ -31,6 +33,7 @@ export class AdventureEngine {
   private sceneChangeCallbacks: SceneChangeCallback[] = [];
   private inventoryChangeCallbacks: InventoryChangeCallback[] = [];
   private winCallbacks: WinCallback[] = [];
+  private interactionCallbacks: InteractionCallback[] = [];
 
   constructor(adventure: AdventureData) {
     this.adventure = adventure;
@@ -72,28 +75,46 @@ export class AdventureEngine {
       return null;
     }
 
-    // If an item is provided, look for a matching use(item) conditional
     if (withItem) {
       const match = hotspot.use.find(
         (u) => u.condition?.type === 'has' && u.condition.target === withItem
       );
       if (match) {
         this.executeActions(match.actions);
+        this.notifyInteraction({
+          verb: 'use',
+          targetId: hotspotId,
+          condition: match.condition
+            ? { type: match.condition.type, target: match.condition.target, result: true }
+            : undefined,
+          actions: match.actions,
+          text: match.text,
+        });
         return { text: match.text, actions: match.actions };
       }
       return null;
     }
 
-    // If hotspot has a take action, execute it
     if (hotspot.take) {
       this.executeActions(hotspot.take.actions);
+      this.notifyInteraction({
+        verb: 'take',
+        targetId: hotspotId,
+        actions: hotspot.take.actions,
+        text: hotspot.take.text,
+      });
       return { text: hotspot.take.text, actions: hotspot.take.actions };
     }
 
-    // Fall back to default use (no condition)
     const defaultUse = hotspot.use.find((u) => !u.condition);
     if (defaultUse) {
       this.executeActions(defaultUse.actions);
+      this.notifyInteraction({
+        verb: 'use',
+        targetId: hotspotId,
+        actions: defaultUse.actions,
+        text: defaultUse.text,
+      });
       return { text: defaultUse.text, actions: defaultUse.actions };
     }
 
@@ -106,18 +127,33 @@ export class AdventureEngine {
       return null;
     }
 
-    // Find first matching conditional talk
     for (const interaction of character.talk) {
       if (interaction.condition && this.evaluateCondition(interaction.condition)) {
         this.executeActions(interaction.actions);
+        this.notifyInteraction({
+          verb: 'talk',
+          targetId: characterId,
+          condition: {
+            type: interaction.condition.type,
+            target: interaction.condition.target,
+            result: true,
+          },
+          actions: interaction.actions,
+          text: interaction.text,
+        });
         return { text: interaction.text, actions: interaction.actions };
       }
     }
 
-    // Fall back to default talk (no condition)
     const defaultTalk = character.talk.find((t) => !t.condition);
     if (defaultTalk) {
       this.executeActions(defaultTalk.actions);
+      this.notifyInteraction({
+        verb: 'talk',
+        targetId: characterId,
+        actions: defaultTalk.actions,
+        text: defaultTalk.text,
+      });
       return { text: defaultTalk.text, actions: defaultTalk.actions };
     }
 
@@ -130,14 +166,26 @@ export class AdventureEngine {
       return null;
     }
 
-    // Check requires condition
     if (exit.requires && !this.hasItem(exit.requires)) {
-      return { text: exit.locked ?? 'You cannot go there yet.', actions: [] };
+      const result = { text: exit.locked ?? 'You cannot go there yet.', actions: [] as Action[] };
+      this.notifyInteraction({
+        verb: 'exit',
+        targetId: exitId,
+        condition: { type: 'has', target: exit.requires, result: false },
+        actions: result.actions,
+        text: result.text,
+      });
+      return result;
     }
 
-    // Requirements met — execute go action
     const goAction: Action = { type: 'go', target: exit.target };
     this.executeActions([goAction]);
+    this.notifyInteraction({
+      verb: 'exit',
+      targetId: exitId,
+      actions: [goAction],
+      text: exit.look,
+    });
     return { text: exit.look, actions: [goAction] };
   }
 
@@ -225,6 +273,10 @@ export class AdventureEngine {
     this.winCallbacks.push(callback);
   }
 
+  onInteraction(callback: InteractionCallback): void {
+    this.interactionCallbacks.push(callback);
+  }
+
   // --- Private helpers ---
 
   private evaluateCondition(condition: Condition): boolean {
@@ -253,6 +305,12 @@ export class AdventureEngine {
   private notifyWin(): void {
     for (const cb of this.winCallbacks) {
       cb();
+    }
+  }
+
+  private notifyInteraction(event: InteractionEvent): void {
+    for (const cb of this.interactionCallbacks) {
+      cb(event);
     }
   }
 }

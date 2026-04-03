@@ -13,6 +13,8 @@ import { parseVerb } from '../engine/VerbParser';
 import { AdventureEngine } from '../engine/AdventureEngine';
 import { InteractionHandler } from '../engine/InteractionHandler';
 import { BubbleText } from '../engine/BubbleText';
+import { KonamiListener } from '../engine/KonamiListener';
+import { DebugPanel } from '../engine/DebugPanel';
 import type {
   AdventureData,
   HotspotDef,
@@ -122,14 +124,26 @@ export class AdventureScene extends Phaser.Scene {
   private isMoving = false;
   private moveCallback: (() => void) | null = null;
 
+  // Debug
+  private debugPanel: DebugPanel | null = null;
+  private konamiListener: KonamiListener | null = null;
+
   // Pathfinding
   private easystar!: EasyStar.js;
 
   // Verb file path
   private verbFilePath = '/dsl/examples/missing-usb/adventure.verb';
+  private verbBaseDir = '/dsl/examples/missing-usb';
 
   constructor() {
     super({ key: 'AdventureScene' });
+  }
+
+  init(data?: { verbFilePath?: string }): void {
+    if (data?.verbFilePath) {
+      this.verbFilePath = data.verbFilePath;
+      this.verbBaseDir = data.verbFilePath.substring(0, data.verbFilePath.lastIndexOf('/'));
+    }
   }
 
   preload(): void {
@@ -216,6 +230,12 @@ export class AdventureScene extends Phaser.Scene {
     this.setupCamera();
     this.createInventoryUI();
     this.createUIOverlay();
+
+    // Debug mode — activated by Konami Code
+    this.debugPanel = new DebugPanel(this, this.engine);
+    this.konamiListener = new KonamiListener(() => {
+      this.debugPanel?.toggle();
+    });
   }
 
   // ── Animations (reused from IsoScene) ───────────────────────────
@@ -290,7 +310,8 @@ export class AdventureScene extends Phaser.Scene {
     if (!sceneDef) return;
 
     // Load map JSON
-    const mapPath = `/dsl/examples/missing-usb/${sceneDef.map}`;
+    const mapFile = sceneDef.map.endsWith('.json') ? sceneDef.map : `maps/${sceneDef.map}.json`;
+    const mapPath = `${this.verbBaseDir}/${mapFile}`;
     try {
       const response = await fetch(mapPath);
       this.mapData = await response.json() as MapData;
@@ -1084,5 +1105,10 @@ export class AdventureScene extends Phaser.Scene {
       fontSize: '18px',
       color: '#ff4444',
     }).setOrigin(0.5);
+  }
+
+  shutdown(): void {
+    this.konamiListener?.destroy();
+    this.debugPanel?.destroy();
   }
 }

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "missing-usb",
+    "title": "The Missing USB",
+    "color": "#9a4aff",
+    "verb": "/dsl/examples/missing-usb/adventure.verb"
+  },
+  {
+    "id": "phantom-code",
+    "title": "The Phantom Code",
+    "color": "#c0392b",
+    "verb": "/dsl/examples/phantom-code/adventure.verb"
+  },
+  {
+    "id": "iso-demo",
+    "title": "Iso Demo",
+    "color": "#2a7a4a",
+    "scene": "IsoScene"
+  }
+]

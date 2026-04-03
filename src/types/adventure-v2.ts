@@ -78,3 +78,11 @@ export interface InteractionResult {
   text: string;
   actions: Action[];
 }
+
+export interface InteractionEvent {
+  verb: 'use' | 'talk' | 'take' | 'exit';
+  targetId: string;
+  condition?: Condition & { result: boolean };
+  actions: Action[];
+  text: string;
+}

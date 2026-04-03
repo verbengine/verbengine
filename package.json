@@ -1,11 +1,27 @@
 {
   "name": "verbengine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-powered point-and-click adventure engine inspired by LucasArts classics",
   "type": "module",
+  "main": "dist/lib/verbengine.cjs",
+  "module": "dist/lib/verbengine.js",
+  "types": "dist/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib/verbengine.js",
+      "require": "./dist/lib/verbengine.cjs",
+      "types": "./dist/lib/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/lib/",
+    "src/api/",
+    "src/types/fyso-teams.ts"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:lib": "vite build --config vite.config.lib.ts",
     "test": "vitest run",
     "preview": "vite preview"
   },
@@ -13,6 +29,9 @@
   "author": "",
   "license": "MIT",
   "packageManager": "pnpm@10.30.2",
+  "peerDependencies": {
+    "phaser": "^3.90.0"
+  },
   "dependencies": {
     "easystarjs": "^0.4.4",
     "phaser": "^3.90.0"

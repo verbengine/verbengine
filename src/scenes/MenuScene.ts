@@ -1,32 +1,29 @@
 import Phaser from "phaser";
-import { createAdventure, listAdventures } from "../api/fyso";
-import type { Adventure } from "../types/adventure";
 
-type MenuState = "idle" | "loading" | "error";
+interface GameEntry {
+  id: string;
+  title: string;
+  color: string;
+  verb?: string;
+  scene?: string;
+}
 
 export class MenuScene extends Phaser.Scene {
   private container: HTMLDivElement | null = null;
-  private state: MenuState = "idle";
-  private adventures: Adventure[] = [];
-  private errorMessage = "";
 
   constructor() {
     super({ key: "MenuScene" });
   }
 
   create(): void {
-    this.state = "idle";
-    this.adventures = [];
-    this.errorMessage = "";
     this.buildDOM();
-    this.fetchAdventures();
   }
 
   shutdown(): void {
     this.removeDOM();
   }
 
-  private buildDOM(): void {
+  private async buildDOM(): Promise<void> {
     this.removeDOM();
 
     const canvas = this.game.canvas;
@@ -36,328 +33,98 @@ export class MenuScene extends Phaser.Scene {
     container.id = "menu-scene";
     container.style.cssText = `
       position: absolute;
-      top: 0;
-      left: 0;
-      width: ${canvas.width}px;
-      height: ${canvas.height}px;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      padding: 40px 20px;
-      box-sizing: border-box;
       font-family: monospace;
       color: #e0e0e0;
-      background: rgba(26, 26, 46, 0.95);
+      background: rgba(26, 26, 46, 0.97);
       overflow-y: auto;
     `;
 
-    // Title
+    const header = document.createElement("div");
+    header.style.cssText = "text-align: center; padding: 30px 0 20px 0;";
+
     const title = document.createElement("h1");
     title.textContent = "VerbEngine";
-    title.style.cssText = `
-      font-size: 36px;
-      margin: 0 0 8px 0;
-      color: #ffffff;
-      letter-spacing: 2px;
-    `;
-    container.appendChild(title);
+    title.style.cssText = "font-size: 32px; margin: 0 0 6px 0; color: #fff; letter-spacing: 2px;";
+    header.appendChild(title);
 
     const subtitle = document.createElement("p");
-    subtitle.textContent = "AI-powered point-and-click adventures";
-    subtitle.style.cssText = `
-      font-size: 14px;
-      margin: 0 0 32px 0;
-      color: #888;
-    `;
-    container.appendChild(subtitle);
+    subtitle.textContent = "Choose your adventure";
+    subtitle.style.cssText = "font-size: 13px; margin: 0; color: #888;";
+    header.appendChild(subtitle);
 
-    // Prompt input section
-    const promptSection = document.createElement("div");
-    promptSection.style.cssText = `
-      width: 100%;
-      max-width: 560px;
-      margin-bottom: 24px;
-    `;
+    container.appendChild(header);
 
-    const promptInput = document.createElement("input");
-    promptInput.id = "menu-prompt-input";
-    promptInput.type = "text";
-    promptInput.placeholder = "Describe your adventure...";
-    promptInput.style.cssText = `
-      width: 100%;
-      padding: 12px 16px;
-      font-size: 16px;
-      font-family: monospace;
-      background: #2a2a3e;
-      border: 1px solid #444;
-      border-radius: 6px;
-      color: #e0e0e0;
-      outline: none;
-      box-sizing: border-box;
-      margin-bottom: 12px;
-    `;
-    promptSection.appendChild(promptInput);
-
-    const buttonRow = document.createElement("div");
-    buttonRow.style.cssText = `
-      display: flex;
+    const grid = document.createElement("div");
+    grid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       gap: 12px;
-    `;
-
-    const generateBtn = document.createElement("button");
-    generateBtn.id = "menu-generate-btn";
-    generateBtn.textContent = "Generate";
-    generateBtn.style.cssText = this.buttonStyle("#4a9eff");
-    buttonRow.appendChild(generateBtn);
-
-    const exampleBtn = document.createElement("button");
-    exampleBtn.id = "menu-example-btn";
-    exampleBtn.textContent = "Play Example";
-    exampleBtn.style.cssText = this.buttonStyle("#666");
-    buttonRow.appendChild(exampleBtn);
-
-    const isoBtn = document.createElement("button");
-    isoBtn.id = "menu-iso-btn";
-    isoBtn.textContent = "Iso Demo";
-    isoBtn.style.cssText = this.buttonStyle("#2a7a4a");
-    buttonRow.appendChild(isoBtn);
-
-    const adventureBtn = document.createElement("button");
-    adventureBtn.id = "menu-adventure-btn";
-    adventureBtn.textContent = "Play Adventure";
-    adventureBtn.style.cssText = this.buttonStyle("#9a4aff");
-    buttonRow.appendChild(adventureBtn);
-
-    promptSection.appendChild(buttonRow);
-
-    // Status text (loading / error)
-    const statusText = document.createElement("p");
-    statusText.id = "menu-status";
-    statusText.style.cssText = `
-      font-size: 14px;
-      margin: 12px 0 0 0;
-      min-height: 20px;
-      color: #888;
-    `;
-    promptSection.appendChild(statusText);
-
-    // Retry button (hidden by default)
-    const retryBtn = document.createElement("button");
-    retryBtn.id = "menu-retry-btn";
-    retryBtn.textContent = "Retry";
-    retryBtn.style.cssText = this.buttonStyle("#cc4444");
-    retryBtn.style.display = "none";
-    retryBtn.style.marginTop = "8px";
-    promptSection.appendChild(retryBtn);
-
-    container.appendChild(promptSection);
-
-    // Adventure list section
-    const listSection = document.createElement("div");
-    listSection.id = "menu-adventure-list";
-    listSection.style.cssText = `
+      padding: 10px 24px 30px 24px;
+      max-width: 600px;
       width: 100%;
-      max-width: 560px;
     `;
 
-    const listTitle = document.createElement("h2");
-    listTitle.textContent = "Your Adventures";
-    listTitle.style.cssText = `
-      font-size: 18px;
-      margin: 0 0 12px 0;
-      color: #ccc;
-    `;
-    listSection.appendChild(listTitle);
+    let games: GameEntry[] = [];
+    try {
+      const response = await fetch("/games.json");
+      games = await response.json();
+    } catch {
+      games = [
+        { id: "missing-usb", title: "The Missing USB", color: "#9a4aff", verb: "/dsl/examples/missing-usb/adventure.verb" },
+      ];
+    }
 
-    const listContainer = document.createElement("div");
-    listContainer.id = "menu-adventures-container";
-    listSection.appendChild(listContainer);
+    for (const game of games) {
+      const card = document.createElement("div");
+      card.style.cssText = `
+        background: ${game.color};
+        border-radius: 8px;
+        padding: 16px 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        min-height: 100px;
+        transition: transform 0.15s, box-shadow 0.15s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      `;
 
-    container.appendChild(listSection);
+      const label = document.createElement("span");
+      label.textContent = game.title;
+      label.style.cssText = "font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.5);";
+      card.appendChild(label);
 
+      card.addEventListener("mouseenter", () => {
+        card.style.transform = "scale(1.06)";
+        card.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+      });
+      card.addEventListener("mouseleave", () => {
+        card.style.transform = "scale(1)";
+        card.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+      });
+
+      card.addEventListener("click", () => {
+        this.removeDOM();
+        if (game.scene) {
+          this.scene.start(game.scene);
+        } else if (game.verb) {
+          this.scene.start("AdventureScene", { verbFilePath: game.verb });
+        }
+      });
+
+      grid.appendChild(card);
+    }
+
+    container.appendChild(grid);
     parent.style.position = "relative";
     parent.appendChild(container);
     this.container = container;
-
-    // Event listeners
-    generateBtn.addEventListener("click", () => this.handleGenerate(promptInput.value));
-    promptInput.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        this.handleGenerate(promptInput.value);
-      }
-    });
-    exampleBtn.addEventListener("click", () => this.navigateToBootScene());
-    isoBtn.addEventListener("click", () => this.navigateToIsoScene());
-    adventureBtn.addEventListener("click", () => this.navigateToAdventureScene());
-    retryBtn.addEventListener("click", () => this.handleGenerate(promptInput.value));
-  }
-
-  private buttonStyle(bgColor: string): string {
-    return `
-      padding: 10px 24px;
-      font-size: 14px;
-      font-family: monospace;
-      background: ${bgColor};
-      border: none;
-      border-radius: 6px;
-      color: #ffffff;
-      cursor: pointer;
-      transition: opacity 0.2s;
-    `;
-  }
-
-  private updateStatus(): void {
-    if (!this.container) return;
-
-    const statusEl = this.container.querySelector<HTMLParagraphElement>("#menu-status");
-    const generateBtn = this.container.querySelector<HTMLButtonElement>("#menu-generate-btn");
-    const promptInput = this.container.querySelector<HTMLInputElement>("#menu-prompt-input");
-    const retryBtn = this.container.querySelector<HTMLButtonElement>("#menu-retry-btn");
-
-    if (!statusEl || !generateBtn || !promptInput || !retryBtn) return;
-
-    switch (this.state) {
-      case "idle":
-        statusEl.textContent = "";
-        statusEl.style.color = "#888";
-        generateBtn.disabled = false;
-        generateBtn.style.opacity = "1";
-        promptInput.disabled = false;
-        retryBtn.style.display = "none";
-        break;
-      case "loading":
-        statusEl.textContent = "Generating adventure...";
-        statusEl.style.color = "#4a9eff";
-        generateBtn.disabled = true;
-        generateBtn.style.opacity = "0.5";
-        promptInput.disabled = true;
-        retryBtn.style.display = "none";
-        break;
-      case "error":
-        statusEl.textContent = this.errorMessage;
-        statusEl.style.color = "#cc4444";
-        generateBtn.disabled = false;
-        generateBtn.style.opacity = "1";
-        promptInput.disabled = false;
-        retryBtn.style.display = "inline-block";
-        break;
-    }
-  }
-
-  private async handleGenerate(prompt: string): Promise<void> {
-    const trimmed = prompt.trim();
-    if (!trimmed) return;
-    if (this.state === "loading") return;
-
-    this.state = "loading";
-    this.updateStatus();
-
-    try {
-      const adventure = await createAdventure(trimmed, 3);
-      this.navigateToBootScene(adventure.id);
-    } catch (err: unknown) {
-      this.state = "error";
-      this.errorMessage =
-        err instanceof Error ? err.message : "Failed to generate adventure";
-      this.updateStatus();
-    }
-  }
-
-  private async fetchAdventures(): Promise<void> {
-    try {
-      this.adventures = await listAdventures();
-      this.renderAdventureList();
-    } catch {
-      // Silently ignore list fetch errors — the list is optional
-    }
-  }
-
-  private renderAdventureList(): void {
-    if (!this.container) return;
-
-    const listContainer = this.container.querySelector<HTMLDivElement>(
-      "#menu-adventures-container"
-    );
-    if (!listContainer) return;
-
-    listContainer.innerHTML = "";
-
-    if (this.adventures.length === 0) {
-      const empty = document.createElement("p");
-      empty.textContent = "No adventures yet. Generate one above!";
-      empty.style.cssText = "color: #666; font-size: 13px;";
-      listContainer.appendChild(empty);
-      return;
-    }
-
-    for (const adventure of this.adventures) {
-      const item = document.createElement("div");
-      item.className = "menu-adventure-item";
-      item.dataset.adventureId = adventure.id;
-      item.style.cssText = `
-        padding: 12px 16px;
-        margin-bottom: 8px;
-        background: #2a2a3e;
-        border: 1px solid #333;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: border-color 0.2s;
-      `;
-
-      const itemTitle = document.createElement("div");
-      itemTitle.textContent = adventure.title || "Untitled Adventure";
-      itemTitle.style.cssText = "font-size: 15px; color: #e0e0e0; margin-bottom: 4px;";
-      item.appendChild(itemTitle);
-
-      const itemPrompt = document.createElement("div");
-      itemPrompt.textContent = adventure.prompt;
-      itemPrompt.style.cssText = `
-        font-size: 12px;
-        color: #888;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      `;
-      item.appendChild(itemPrompt);
-
-      const statusBadge = document.createElement("span");
-      statusBadge.textContent = adventure.status;
-      statusBadge.style.cssText = `
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 4px;
-        margin-top: 4px;
-        display: inline-block;
-        background: ${adventure.status === "ready" ? "#2d5a27" : adventure.status === "generating" ? "#5a4a27" : "#5a2727"};
-        color: ${adventure.status === "ready" ? "#7bc67b" : adventure.status === "generating" ? "#c6b67b" : "#c67b7b"};
-      `;
-      item.appendChild(statusBadge);
-
-      if (adventure.status === "ready") {
-        item.addEventListener("click", () => this.navigateToBootScene(adventure.id));
-      } else {
-        item.style.opacity = "0.6";
-        item.style.cursor = "default";
-      }
-
-      listContainer.appendChild(item);
-    }
-  }
-
-  private navigateToBootScene(adventureId?: string): void {
-    this.removeDOM();
-    this.scene.start("BootScene", { adventureId });
-  }
-
-  private navigateToIsoScene(): void {
-    this.removeDOM();
-    this.scene.start("IsoScene");
-  }
-
-  private navigateToAdventureScene(): void {
-    this.removeDOM();
-    this.scene.start("AdventureScene");
   }
 
   private removeDOM(): void {
