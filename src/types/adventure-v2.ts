@@ -61,11 +61,19 @@ export interface SceneDef {
   exits: ExitDef[];
 }
 
+export interface CombineDef {
+  itemA: string;
+  itemB: string;
+  actions: Action[];
+  text: string;
+}
+
 export interface AdventureData {
   title: string;
   startScene: string;
   items: Record<string, ItemDef>;
   scenes: Record<string, SceneDef>;
+  combinations?: CombineDef[];
 }
 
 export interface GameState {

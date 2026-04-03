@@ -32,6 +32,8 @@ adventure "The Phantom Code" {
     }
   }
 
+  combine pendrive + documento_secreto -> get(evidencia_completa) -> remove(pendrive) -> remove(documento_secreto) "You load the secret document onto the USB drive. Now you have complete evidence."
+
   scene recepcion {
     map: "recepcion"
     description: "The lobby of NovaCorp. All glass and chrome, like a confession booth for data criminals. You're here to find the truth — if it hasn't already been shredded."

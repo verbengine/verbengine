@@ -8,6 +8,7 @@ import type {
   Action,
   AdventureData,
   CharacterDef,
+  CombineDef,
   Condition,
   ConditionalInteraction,
   ExitDef,
@@ -32,6 +33,7 @@ type TokenType =
   | 'colon'
   | 'comma'
   | 'arrow'
+  | 'plus'
   | 'eof';
 
 interface Token {
@@ -44,6 +46,7 @@ const KEYWORDS = new Set([
   'adventure',
   'start',
   'items',
+  'combine',
   'scene',
   'hotspot',
   'character',
@@ -157,6 +160,7 @@ function tokenize(source: string): Token[] {
       ')': 'rparen',
       ':': 'colon',
       ',': 'comma',
+      '+': 'plus',
     };
 
     if (singleTokens[ch]) {
@@ -199,6 +203,7 @@ class Parser {
     let startScene = '';
     let items: Record<string, ItemDef> = {};
     const scenes: Record<string, SceneDef> = {};
+    const combinations: CombineDef[] = [];
 
     while (!this.check('rbrace')) {
       const token = this.peek();
@@ -209,6 +214,8 @@ class Parser {
         startScene = this.expectIdentifier();
       } else if (token.type === 'keyword' && token.value === 'items') {
         items = this.parseItems();
+      } else if (token.type === 'keyword' && token.value === 'combine') {
+        combinations.push(this.parseCombine());
       } else if (token.type === 'keyword' && token.value === 'scene') {
         const scene = this.parseScene();
         scenes[scene.id] = scene;
@@ -223,7 +230,28 @@ class Parser {
       throw new Error('Missing start scene declaration');
     }
 
-    return { title, startScene, items, scenes };
+    const result: AdventureData = { title, startScene, items, scenes };
+    if (combinations.length > 0) {
+      result.combinations = combinations;
+    }
+    return result;
+  }
+
+  // --- Combine ---
+
+  private parseCombine(): CombineDef {
+    this.expect('keyword', 'combine');
+    const itemA = this.expectIdentifier();
+    this.expect('plus');
+    const itemB = this.expectIdentifier();
+
+    const actions: Action[] = [];
+    while (this.check('arrow')) {
+      actions.push(this.parseAction());
+    }
+
+    const text = this.expectString();
+    return { itemA, itemB, actions, text };
   }
 
   // --- Items ---

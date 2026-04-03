@@ -10,6 +10,7 @@ import {
   Action,
   AdventureData,
   CharacterDef,
+  CombineDef,
   Condition,
   ConditionalInteraction,
   ExitDef,
@@ -232,6 +233,32 @@ export class AdventureEngine {
       text: exit.look,
     });
     return { text: exit.look, actions: [goAction] };
+  }
+
+  combineItems(itemA: string, itemB: string): InteractionResult | null {
+    if (!this.hasItem(itemA) || !this.hasItem(itemB)) {
+      return null;
+    }
+
+    const combinations: CombineDef[] = this.adventure.combinations ?? [];
+    const match = combinations.find(
+      (c) =>
+        (c.itemA === itemA && c.itemB === itemB) ||
+        (c.itemA === itemB && c.itemB === itemA)
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    this.executeActions(match.actions);
+    this.notifyInteraction({
+      verb: 'use',
+      targetId: `${itemA}+${itemB}`,
+      actions: match.actions,
+      text: match.text,
+    });
+    return { text: match.text, actions: match.actions };
   }
 
   // --- Actions ---

@@ -585,6 +585,104 @@ describe('AdventureEngine', () => {
     expect(engine.getItem('nonexistent')).toBeUndefined();
   });
 
+  // --- Item combination ---
+
+  function buildAdventureWithCombinations(): AdventureData {
+    const base = buildTestAdventure();
+    return {
+      ...base,
+      combinations: [
+        {
+          itemA: 'usb_drive',
+          itemB: 'coffee_cup',
+          actions: [
+            { type: 'get', target: 'server_key' },
+            { type: 'remove', target: 'usb_drive' },
+            { type: 'remove', target: 'coffee_cup' },
+          ],
+          text: 'You dip the USB in coffee and it unlocks... somehow.',
+        },
+      ],
+    };
+  }
+
+  it('should combine items when both are in inventory (A+B order)', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).not.toBeNull();
+    expect(result!.text).toContain('USB in coffee');
+  });
+
+  it('should combine items when both are in inventory (B+A order)', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('coffee_cup', 'usb_drive');
+    expect(result).not.toBeNull();
+    expect(result!.text).toContain('USB in coffee');
+  });
+
+  it('should execute actions when combining items', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    engine.combineItems('usb_drive', 'coffee_cup');
+    expect(engine.hasItem('server_key')).toBe(true);
+    expect(engine.hasItem('usb_drive')).toBe(false);
+    expect(engine.hasItem('coffee_cup')).toBe(false);
+  });
+
+  it('should return null when item A is not in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when item B is not in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when neither item is in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null for non-existent combination', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'server_key' }]);
+    const result = engine.combineItems('usb_drive', 'server_key');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when adventure has no combinations defined', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should fire interaction event when combining items', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.combineItems('usb_drive', 'coffee_cup');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('use');
+    expect(event.text).toContain('USB in coffee');
+  });
+
   // --- Flag-based conditions ---
 
   it('should evaluate flag conditions in character talk', () => {
