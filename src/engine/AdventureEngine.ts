@@ -20,6 +20,7 @@ import {
   ItemDef,
   SceneDef,
 } from '../types/adventure-v2';
+import { SerializedGameState } from './SaveManager';
 
 type SceneChangeCallback = (sceneId: string) => void;
 type InventoryChangeCallback = (inventory: string[]) => void;
@@ -49,6 +50,22 @@ export class AdventureEngine {
 
   getState(): GameState {
     return this.state;
+  }
+
+  /**
+   * Restore the engine to a previously saved state.
+   * Fires sceneChange and inventoryChange callbacks so the UI can react.
+   */
+  loadState(saved: SerializedGameState): void {
+    this.state = {
+      currentScene: saved.currentScene,
+      inventory: [...saved.inventory],
+      flags: new Set<string>(saved.flags),
+      removedHotspots: new Set<string>(saved.removedHotspots),
+    };
+
+    this.notifySceneChange(this.state.currentScene);
+    this.notifyInventoryChange();
   }
 
   getCurrentScene(): SceneDef {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AdventureEngine } from './AdventureEngine';
 import { AdventureData } from '../types/adventure-v2';
+import { SerializedGameState } from './SaveManager';
 
 /**
  * Build a test adventure matching the spec example:
@@ -599,6 +600,109 @@ describe('AdventureEngine', () => {
     const result = engine.interactCharacter('ana');
     expect(result).not.toBeNull();
     expect(result!.text).toContain('talked to Carlos');
+  });
+
+  // --- loadState ---
+
+  it('loadState restores currentScene', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'pasillo',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.getState().currentScene).toBe('pasillo');
+    expect(engine.getCurrentScene().id).toBe('pasillo');
+  });
+
+  it('loadState restores inventory', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: ['usb_drive', 'server_key'],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.hasItem('usb_drive')).toBe(true);
+    expect(engine.hasItem('server_key')).toBe(true);
+    expect(engine.getInventory()).toEqual(['usb_drive', 'server_key']);
+  });
+
+  it('loadState restores flags', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: ['talked_to_ana', 'desk_unlocked'],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.hasFlag('talked_to_ana')).toBe(true);
+    expect(engine.hasFlag('desk_unlocked')).toBe(true);
+    expect(engine.hasFlag('nonexistent')).toBe(false);
+  });
+
+  it('loadState restores removedHotspots', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: [],
+      removedHotspots: ['cafetera'],
+    };
+    engine.loadState(saved);
+    expect(engine.isHotspotRemoved('cafetera')).toBe(true);
+    expect(engine.interactHotspot('cafetera')).toBeNull();
+  });
+
+  it('loadState fires sceneChange callback', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const sceneCallback = vi.fn();
+    engine.onSceneChange(sceneCallback);
+
+    const saved: SerializedGameState = {
+      currentScene: 'server_room',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(sceneCallback).toHaveBeenCalledWith('server_room');
+  });
+
+  it('loadState fires inventoryChange callback', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const inventoryCallback = vi.fn();
+    engine.onInventoryChange(inventoryCallback);
+
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: ['usb_drive'],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(inventoryCallback).toHaveBeenCalledWith(['usb_drive']);
+  });
+
+  it('loadState replaces existing state rather than merging', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'set', target: 'some_flag' }]);
+
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+
+    expect(engine.hasItem('usb_drive')).toBe(false);
+    expect(engine.hasFlag('some_flag')).toBe(false);
   });
 
   // --- Full playthrough ---
