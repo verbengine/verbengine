@@ -470,6 +470,63 @@ describe('AdventureEngine', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
+  // --- lookAt ---
+
+  it('should return look text for a hotspot', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('escritorio_ana');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('A messy desk with papers everywhere.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return look text for a character', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('ana');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('Ana, the senior developer.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return look text for an exit', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('pasillo_norte');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('A corridor leading north.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return null for a non-existent target', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('nonexistent');
+    expect(result).toBeNull();
+  });
+
+  it('should fire interaction callback with verb look', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.lookAt('cafetera');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('look');
+    expect(event.targetId).toBe('cafetera');
+    expect(event.text).toBe('A coffee machine. There\'s something behind it...');
+  });
+
+  it('should never trigger actions when looking at any target', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const inventoryCallback = vi.fn();
+    const sceneCallback = vi.fn();
+    engine.onInventoryChange(inventoryCallback);
+    engine.onSceneChange(sceneCallback);
+    engine.lookAt('escritorio_ana');
+    engine.lookAt('ana');
+    engine.lookAt('pasillo_norte');
+    expect(inventoryCallback).not.toHaveBeenCalled();
+    expect(sceneCallback).not.toHaveBeenCalled();
+  });
+
   // --- Queries ---
 
   it('should return hotspot by id', () => {

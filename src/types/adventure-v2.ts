@@ -80,7 +80,7 @@ export interface InteractionResult {
 }
 
 export interface InteractionEvent {
-  verb: 'use' | 'talk' | 'take' | 'exit';
+  verb: 'use' | 'talk' | 'take' | 'exit' | 'look';
   targetId: string;
   condition?: Condition & { result: boolean };
   actions: Action[];

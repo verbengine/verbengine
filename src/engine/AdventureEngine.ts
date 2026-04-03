@@ -160,6 +160,30 @@ export class AdventureEngine {
     return null;
   }
 
+  lookAt(targetId: string): InteractionResult | null {
+    const scene = this.getCurrentScene();
+
+    const hotspot = scene.hotspots.find((h) => h.id === targetId);
+    if (hotspot) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: hotspot.look });
+      return { text: hotspot.look, actions: [] };
+    }
+
+    const character = scene.characters.find((c) => c.id === targetId);
+    if (character) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: character.look });
+      return { text: character.look, actions: [] };
+    }
+
+    const exit = scene.exits.find((e) => e.id === targetId);
+    if (exit) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: exit.look });
+      return { text: exit.look, actions: [] };
+    }
+
+    return null;
+  }
+
   interactExit(exitId: string): InteractionResult | null {
     const exit = this.getExit(exitId);
     if (!exit) {

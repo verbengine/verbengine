@@ -50,6 +50,30 @@ describe('Walkthrough: The Missing USB', () => {
     expect(ana!.look).toContain('Ana');
   });
 
+  it('lookAt returns correct text for hotspot, character, and exit', () => {
+    const engine = createEngine();
+
+    const deskLook = engine.lookAt('escritorio_ana');
+    expect(deskLook).not.toBeNull();
+    expect(deskLook!.text).toContain('messy desk');
+    expect(deskLook!.actions).toEqual([]);
+
+    const anaLook = engine.lookAt('ana');
+    expect(anaLook).not.toBeNull();
+    expect(anaLook!.text).toContain('Ana');
+    expect(anaLook!.actions).toEqual([]);
+
+    const exitLook = engine.lookAt('pasillo_norte');
+    expect(exitLook).not.toBeNull();
+    expect(exitLook!.text).toBeTruthy();
+    expect(exitLook!.actions).toEqual([]);
+  });
+
+  it('lookAt returns null for non-existent target', () => {
+    const engine = createEngine();
+    expect(engine.lookAt('does_not_exist')).toBeNull();
+  });
+
   it('complete walkthrough reaches win condition', () => {
     const engine = createEngine();
     let won = false;
@@ -156,6 +180,20 @@ describe('Walkthrough: The Phantom Code', () => {
     const result = engine.interactExit('oficinas');
     expect(result!.text).toContain('badge');
     expect(engine.getState().currentScene).toBe('recepcion');
+  });
+
+  it('lookAt returns correct text for hotspot, character, and exit', () => {
+    const engine = createEngine();
+
+    const recepcionistLook = engine.lookAt('recepcionista');
+    expect(recepcionistLook).not.toBeNull();
+    expect(recepcionistLook!.text).toBeTruthy();
+    expect(recepcionistLook!.actions).toEqual([]);
+
+    const exitLook = engine.lookAt('oficinas');
+    expect(exitLook).not.toBeNull();
+    expect(exitLook!.text).toBeTruthy();
+    expect(exitLook!.actions).toEqual([]);
   });
 
   it('complete walkthrough reaches win condition', () => {
