@@ -10,6 +10,7 @@ import {
   Action,
   AdventureData,
   CharacterDef,
+  CombineDef,
   Condition,
   ConditionalInteraction,
   ExitDef,
@@ -20,6 +21,7 @@ import {
   ItemDef,
   SceneDef,
 } from '../types/adventure-v2';
+import { SerializedGameState } from './SaveManager';
 
 type SceneChangeCallback = (sceneId: string) => void;
 type InventoryChangeCallback = (inventory: string[]) => void;
@@ -51,8 +53,28 @@ export class AdventureEngine {
     return this.state;
   }
 
+  /**
+   * Restore the engine to a previously saved state.
+   * Fires sceneChange and inventoryChange callbacks so the UI can react.
+   */
+  loadState(saved: SerializedGameState): void {
+    this.state = {
+      currentScene: saved.currentScene,
+      inventory: [...saved.inventory],
+      flags: new Set<string>(saved.flags),
+      removedHotspots: new Set<string>(saved.removedHotspots),
+    };
+
+    this.notifySceneChange(this.state.currentScene);
+    this.notifyInventoryChange();
+  }
+
   getCurrentScene(): SceneDef {
     return this.adventure.scenes[this.state.currentScene];
+  }
+
+  getSceneDescription(): string | undefined {
+    return this.getCurrentScene().description;
   }
 
   getInventory(): string[] {
@@ -160,6 +182,30 @@ export class AdventureEngine {
     return null;
   }
 
+  lookAt(targetId: string): InteractionResult | null {
+    const scene = this.getCurrentScene();
+
+    const hotspot = scene.hotspots.find((h) => h.id === targetId);
+    if (hotspot) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: hotspot.look });
+      return { text: hotspot.look, actions: [] };
+    }
+
+    const character = scene.characters.find((c) => c.id === targetId);
+    if (character) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: character.look });
+      return { text: character.look, actions: [] };
+    }
+
+    const exit = scene.exits.find((e) => e.id === targetId);
+    if (exit) {
+      this.notifyInteraction({ verb: 'look', targetId, actions: [], text: exit.look });
+      return { text: exit.look, actions: [] };
+    }
+
+    return null;
+  }
+
   interactExit(exitId: string): InteractionResult | null {
     const exit = this.getExit(exitId);
     if (!exit) {
@@ -187,6 +233,32 @@ export class AdventureEngine {
       text: exit.look,
     });
     return { text: exit.look, actions: [goAction] };
+  }
+
+  combineItems(itemA: string, itemB: string): InteractionResult | null {
+    if (!this.hasItem(itemA) || !this.hasItem(itemB)) {
+      return null;
+    }
+
+    const combinations: CombineDef[] = this.adventure.combinations ?? [];
+    const match = combinations.find(
+      (c) =>
+        (c.itemA === itemA && c.itemB === itemB) ||
+        (c.itemA === itemB && c.itemB === itemA)
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    this.executeActions(match.actions);
+    this.notifyInteraction({
+      verb: 'use',
+      targetId: `${itemA}+${itemB}`,
+      actions: match.actions,
+      text: match.text,
+    });
+    return { text: match.text, actions: match.actions };
   }
 
   // --- Actions ---

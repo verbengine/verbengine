@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AdventureEngine } from './AdventureEngine';
 import { AdventureData } from '../types/adventure-v2';
+import { SerializedGameState } from './SaveManager';
 
 /**
  * Build a test adventure matching the spec example:
@@ -174,6 +175,28 @@ describe('AdventureEngine', () => {
     const scene = engine.getCurrentScene();
     expect(scene.id).toBe('oficina');
     expect(scene.map).toBe('office_main');
+  });
+
+  // --- Scene description ---
+
+  it('should return scene description when present', () => {
+    const adventure = buildTestAdventure();
+    adventure.scenes['oficina'].description = 'The bustling office floor.';
+    const engine = new AdventureEngine(adventure);
+    expect(engine.getSceneDescription()).toBe('The bustling office floor.');
+  });
+
+  it('should return undefined for scene without description', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    expect(engine.getSceneDescription()).toBeUndefined();
+  });
+
+  it('should return description for the current scene after scene change', () => {
+    const adventure = buildTestAdventure();
+    adventure.scenes['pasillo'].description = 'A long empty corridor.';
+    const engine = new AdventureEngine(adventure);
+    engine.executeActions([{ type: 'go', target: 'pasillo' }]);
+    expect(engine.getSceneDescription()).toBe('A long empty corridor.');
   });
 
   // --- Inventory ---
@@ -470,6 +493,63 @@ describe('AdventureEngine', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
+  // --- lookAt ---
+
+  it('should return look text for a hotspot', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('escritorio_ana');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('A messy desk with papers everywhere.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return look text for a character', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('ana');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('Ana, the senior developer.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return look text for an exit', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('pasillo_norte');
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe('A corridor leading north.');
+    expect(result!.actions).toEqual([]);
+  });
+
+  it('should return null for a non-existent target', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const result = engine.lookAt('nonexistent');
+    expect(result).toBeNull();
+  });
+
+  it('should fire interaction callback with verb look', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.lookAt('cafetera');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('look');
+    expect(event.targetId).toBe('cafetera');
+    expect(event.text).toBe('A coffee machine. There\'s something behind it...');
+  });
+
+  it('should never trigger actions when looking at any target', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const inventoryCallback = vi.fn();
+    const sceneCallback = vi.fn();
+    engine.onInventoryChange(inventoryCallback);
+    engine.onSceneChange(sceneCallback);
+    engine.lookAt('escritorio_ana');
+    engine.lookAt('ana');
+    engine.lookAt('pasillo_norte');
+    expect(inventoryCallback).not.toHaveBeenCalled();
+    expect(sceneCallback).not.toHaveBeenCalled();
+  });
+
   // --- Queries ---
 
   it('should return hotspot by id', () => {
@@ -505,6 +585,104 @@ describe('AdventureEngine', () => {
     expect(engine.getItem('nonexistent')).toBeUndefined();
   });
 
+  // --- Item combination ---
+
+  function buildAdventureWithCombinations(): AdventureData {
+    const base = buildTestAdventure();
+    return {
+      ...base,
+      combinations: [
+        {
+          itemA: 'usb_drive',
+          itemB: 'coffee_cup',
+          actions: [
+            { type: 'get', target: 'server_key' },
+            { type: 'remove', target: 'usb_drive' },
+            { type: 'remove', target: 'coffee_cup' },
+          ],
+          text: 'You dip the USB in coffee and it unlocks... somehow.',
+        },
+      ],
+    };
+  }
+
+  it('should combine items when both are in inventory (A+B order)', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).not.toBeNull();
+    expect(result!.text).toContain('USB in coffee');
+  });
+
+  it('should combine items when both are in inventory (B+A order)', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('coffee_cup', 'usb_drive');
+    expect(result).not.toBeNull();
+    expect(result!.text).toContain('USB in coffee');
+  });
+
+  it('should execute actions when combining items', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    engine.combineItems('usb_drive', 'coffee_cup');
+    expect(engine.hasItem('server_key')).toBe(true);
+    expect(engine.hasItem('usb_drive')).toBe(false);
+    expect(engine.hasItem('coffee_cup')).toBe(false);
+  });
+
+  it('should return null when item A is not in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when item B is not in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when neither item is in inventory', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should return null for non-existent combination', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'server_key' }]);
+    const result = engine.combineItems('usb_drive', 'server_key');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when adventure has no combinations defined', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const result = engine.combineItems('usb_drive', 'coffee_cup');
+    expect(result).toBeNull();
+  });
+
+  it('should fire interaction event when combining items', () => {
+    const engine = new AdventureEngine(buildAdventureWithCombinations());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'get', target: 'coffee_cup' }]);
+    const callback = vi.fn();
+    engine.onInteraction(callback);
+    engine.combineItems('usb_drive', 'coffee_cup');
+    expect(callback).toHaveBeenCalledOnce();
+    const event = callback.mock.calls[0][0];
+    expect(event.verb).toBe('use');
+    expect(event.text).toContain('USB in coffee');
+  });
+
   // --- Flag-based conditions ---
 
   it('should evaluate flag conditions in character talk', () => {
@@ -520,6 +698,109 @@ describe('AdventureEngine', () => {
     const result = engine.interactCharacter('ana');
     expect(result).not.toBeNull();
     expect(result!.text).toContain('talked to Carlos');
+  });
+
+  // --- loadState ---
+
+  it('loadState restores currentScene', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'pasillo',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.getState().currentScene).toBe('pasillo');
+    expect(engine.getCurrentScene().id).toBe('pasillo');
+  });
+
+  it('loadState restores inventory', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: ['usb_drive', 'server_key'],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.hasItem('usb_drive')).toBe(true);
+    expect(engine.hasItem('server_key')).toBe(true);
+    expect(engine.getInventory()).toEqual(['usb_drive', 'server_key']);
+  });
+
+  it('loadState restores flags', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: ['talked_to_ana', 'desk_unlocked'],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(engine.hasFlag('talked_to_ana')).toBe(true);
+    expect(engine.hasFlag('desk_unlocked')).toBe(true);
+    expect(engine.hasFlag('nonexistent')).toBe(false);
+  });
+
+  it('loadState restores removedHotspots', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: [],
+      removedHotspots: ['cafetera'],
+    };
+    engine.loadState(saved);
+    expect(engine.isHotspotRemoved('cafetera')).toBe(true);
+    expect(engine.interactHotspot('cafetera')).toBeNull();
+  });
+
+  it('loadState fires sceneChange callback', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const sceneCallback = vi.fn();
+    engine.onSceneChange(sceneCallback);
+
+    const saved: SerializedGameState = {
+      currentScene: 'server_room',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(sceneCallback).toHaveBeenCalledWith('server_room');
+  });
+
+  it('loadState fires inventoryChange callback', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    const inventoryCallback = vi.fn();
+    engine.onInventoryChange(inventoryCallback);
+
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: ['usb_drive'],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+    expect(inventoryCallback).toHaveBeenCalledWith(['usb_drive']);
+  });
+
+  it('loadState replaces existing state rather than merging', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    engine.executeActions([{ type: 'get', target: 'usb_drive' }]);
+    engine.executeActions([{ type: 'set', target: 'some_flag' }]);
+
+    const saved: SerializedGameState = {
+      currentScene: 'oficina',
+      inventory: [],
+      flags: [],
+      removedHotspots: [],
+    };
+    engine.loadState(saved);
+
+    expect(engine.hasItem('usb_drive')).toBe(false);
+    expect(engine.hasFlag('some_flag')).toBe(false);
   });
 
   // --- Full playthrough ---

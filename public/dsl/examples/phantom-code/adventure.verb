@@ -32,8 +32,11 @@ adventure "The Phantom Code" {
     }
   }
 
+  combine pendrive + documento_secreto -> get(evidencia_completa) -> remove(pendrive) -> remove(documento_secreto) "You load the secret document onto the USB drive. Now you have complete evidence."
+
   scene recepcion {
     map: "recepcion"
+    description: "The lobby of NovaCorp. All glass and chrome, like a confession booth for data criminals. You're here to find the truth — if it hasn't already been shredded."
 
     hotspot mostrador [7, 3] {
       look: "The reception desk. A sign reads 'NovaCorp - Innovation Through Data'."
@@ -68,6 +71,7 @@ adventure "The Phantom Code" {
 
   scene oficina_abierta {
     map: "oficina_abierta"
+    description: "An open-plan office that smells of burnt coffee and quiet desperation. Every screen here holds a secret — you just need the right password."
 
     hotspot escritorio_dev [4, 5] {
       look: "A developer's desk. Three monitors, energy drink cans everywhere."
@@ -127,6 +131,7 @@ adventure "The Phantom Code" {
 
   scene oficina_ceo {
     map: "oficina_ceo"
+    description: "The CEO's corner office. Power sits in every piece of furniture. Something about this room feels rehearsed — like a stage set built for the cameras."
 
     hotspot escritorio_ceo [7, 5] {
       look: "An imposing mahogany desk. A laptop sits open but locked."
@@ -171,6 +176,7 @@ adventure "The Phantom Code" {
 
   scene sotano {
     map: "sotano"
+    description: "The basement. Dust, forgotten hardware, and the hum of a server that should have been decommissioned years ago. Someone kept it running for a reason."
 
     hotspot servidor_viejo [4, 3] {
       look: "An old server rack. Most units are powered off, but one blinks with activity."
@@ -225,6 +231,7 @@ adventure "The Phantom Code" {
 
   scene estacionamiento {
     map: "estacionamiento"
+    description: "The parking lot at midnight. A single lamp flickers overhead. Somewhere in the dark, a journalist waits for the story that will change everything."
 
     hotspot auto_periodista [7, 5] {
       look: "A beat-up sedan with press credentials on the dashboard. This must be the journalist's car."

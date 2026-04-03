@@ -18,6 +18,7 @@ adventure "The Missing USB" {
 
   scene oficina {
     map: "maps/oficina.json"
+    description: "The open-plan office hums with the white noise of a dozen monitors. Somewhere in here, a USB drive holds the key to the server crisis."
 
     hotspot escritorio_ana [4, 3] {
       look: "A messy desk with papers everywhere."
@@ -58,6 +59,7 @@ adventure "The Missing USB" {
 
   scene pasillo {
     map: "maps/pasillo.json"
+    description: "A narrow corridor with flickering fluorescent lights. The server room door looms to the east."
 
     exit oficina_sur [12, 4] {
       target: oficina
@@ -74,6 +76,7 @@ adventure "The Missing USB" {
 
   scene server_room {
     map: "maps/server_room.json"
+    description: "The server room is cold and deafeningly loud. Rack after rack of blinking LEDs — but one server is still down."
 
     hotspot servidor_principal [5, 5] {
       look: "The main server rack. There's a USB port."

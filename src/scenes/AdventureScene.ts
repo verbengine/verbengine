@@ -15,6 +15,7 @@ import { InteractionHandler } from '../engine/InteractionHandler';
 import { BubbleText } from '../engine/BubbleText';
 import { KonamiListener } from '../engine/KonamiListener';
 import { DebugPanel } from '../engine/DebugPanel';
+import { HotspotHighlighter } from './HotspotHighlighter';
 import type {
   AdventureData,
   HotspotDef,
@@ -128,6 +129,9 @@ export class AdventureScene extends Phaser.Scene {
   private debugPanel: DebugPanel | null = null;
   private konamiListener: KonamiListener | null = null;
 
+  // Hotspot highlighter
+  private hotspotHighlighter: HotspotHighlighter | null = null;
+
   // Pathfinding
   private easystar!: EasyStar.js;
 
@@ -226,6 +230,7 @@ export class AdventureScene extends Phaser.Scene {
     this.createCharacter();
     this.createTargetHighlight();
     this.createHoverHighlight();
+    this.hotspotHighlighter = new HotspotHighlighter(this, SCALED_TILE_W, SCALED_TILE_H);
     this.setupInput();
     this.setupCamera();
     this.createInventoryUI();
@@ -325,6 +330,13 @@ export class AdventureScene extends Phaser.Scene {
 
     // Build tile lookup from adventure data
     this.buildTileLookup(sceneDef.hotspots, sceneDef.characters, sceneDef.exits);
+
+    // Register interactables with the hotspot highlighter
+    if (this.hotspotHighlighter) {
+      const removedHotspots = this.engine.getState().removedHotspots;
+      const visibleHotspots = sceneDef.hotspots.filter(h => !removedHotspots.has(h.id));
+      this.hotspotHighlighter.setInteractables(visibleHotspots, sceneDef.characters, sceneDef.exits);
+    }
 
     // Setup pathfinder
     this.setupPathfinder();
@@ -817,8 +829,10 @@ export class AdventureScene extends Phaser.Scene {
       const grid = this.screenToGrid(pointer.x, pointer.y);
       if (!grid) {
         this.hoverHighlight.clear();
+        this.hotspotHighlighter?.clearHover();
         this.hoverCol = -1;
         this.hoverRow = -1;
+        this.input.setDefaultCursor('default');
         return;
       }
 
@@ -828,6 +842,21 @@ export class AdventureScene extends Phaser.Scene {
       this.hoverCol = col;
       this.hoverRow = row;
       this.drawHoverHighlight(col, row);
+
+      const isInteractive = this.hotspotHighlighter?.updateHover(col, row) ?? false;
+      this.input.setDefaultCursor(isInteractive ? 'pointer' : 'default');
+    });
+
+    // Tab key: toggle reveal of all interactive tiles
+    this.input.keyboard?.on('keydown-TAB', (event: KeyboardEvent) => {
+      event.preventDefault();
+      if (this.hotspotHighlighter) {
+        if (this.hotspotHighlighter.isShowingAll()) {
+          this.hotspotHighlighter.hideAll();
+        } else {
+          this.hotspotHighlighter.showAll();
+        }
+      }
     });
   }
 
@@ -1110,5 +1139,6 @@ export class AdventureScene extends Phaser.Scene {
   shutdown(): void {
     this.konamiListener?.destroy();
     this.debugPanel?.destroy();
+    this.hotspotHighlighter?.destroy();
   }
 }

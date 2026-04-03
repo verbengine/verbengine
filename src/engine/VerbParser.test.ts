@@ -422,6 +422,64 @@ describe('VerbParser', () => {
     expect(data.scenes['b'].exits[0].target).toBe('a');
   });
 
+  // --- Scene description ---
+
+  it('parses scene with description field', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "m"
+          description: "A dusty old room with peeling wallpaper."
+        }
+      }
+    `);
+    expect(data.scenes['room'].description).toBe('A dusty old room with peeling wallpaper.');
+  });
+
+  it('leaves scene description undefined when not present', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "m"
+        }
+      }
+    `);
+    expect(data.scenes['room'].description).toBeUndefined();
+  });
+
+  it('parses scene description alongside other scene properties', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "test_map"
+          description: "The entrance hall."
+          hotspot door [1, 1] {
+            look: "A door."
+            use: "It won't budge."
+          }
+          exit hallway [5, 0] {
+            target: hallway
+            look: "To the hallway."
+          }
+        }
+        scene hallway {
+          map: "hall_map"
+        }
+      }
+    `);
+    const room = data.scenes['room'];
+    expect(room.map).toBe('test_map');
+    expect(room.description).toBe('The entrance hall.');
+    expect(room.hotspots).toHaveLength(1);
+    expect(room.exits).toHaveLength(1);
+  });
+
   // --- Comments ---
 
   it('ignores single-line comments', () => {
@@ -437,5 +495,70 @@ describe('VerbParser', () => {
     `);
     expect(data.title).toBe('Test');
     expect(data.startScene).toBe('room');
+  });
+
+  // --- Combine blocks ---
+
+  it('parses a combine block with actions', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        combine apple + knife -> get(apple_slice) -> remove(apple) "You slice the apple."
+        scene room { map: "m" }
+      }
+    `);
+    expect(data.combinations).toHaveLength(1);
+    const combo = data.combinations![0];
+    expect(combo.itemA).toBe('apple');
+    expect(combo.itemB).toBe('knife');
+    expect(combo.text).toBe('You slice the apple.');
+    expect(combo.actions).toEqual([
+      { type: 'get', target: 'apple_slice' },
+      { type: 'remove', target: 'apple' },
+    ]);
+  });
+
+  it('parses multiple combine blocks', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        combine a + b -> get(c) "AB combo."
+        combine x + y -> win "XY wins."
+        scene room { map: "m" }
+      }
+    `);
+    expect(data.combinations).toHaveLength(2);
+    expect(data.combinations![0].itemA).toBe('a');
+    expect(data.combinations![1].itemA).toBe('x');
+  });
+
+  it('returns no combinations field when no combine blocks present', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room { map: "m" }
+      }
+    `);
+    expect(data.combinations).toBeUndefined();
+  });
+
+  it('parses combine block from phantom-code adventure.verb', () => {
+    const { readFileSync } = require('fs');
+    const { resolve } = require('path');
+    const source = readFileSync(
+      resolve(__dirname, '../../dsl/examples/phantom-code/adventure.verb'),
+      'utf-8'
+    );
+    const data = parseVerb(source);
+    expect(data.combinations).toHaveLength(1);
+    const combo = data.combinations![0];
+    expect(combo.itemA).toBe('pendrive');
+    expect(combo.itemB).toBe('documento_secreto');
+    expect(combo.actions).toContainEqual({ type: 'get', target: 'evidencia_completa' });
+    expect(combo.actions).toContainEqual({ type: 'remove', target: 'pendrive' });
+    expect(combo.actions).toContainEqual({ type: 'remove', target: 'documento_secreto' });
   });
 });

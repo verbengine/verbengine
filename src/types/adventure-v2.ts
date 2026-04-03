@@ -33,6 +33,7 @@ export interface HotspotDef {
   look: string;
   use: ConditionalInteraction[];
   take?: { actions: Action[]; text: string };
+  sound?: string;
 }
 
 export interface CharacterDef {
@@ -55,9 +56,18 @@ export interface ExitDef {
 export interface SceneDef {
   id: string;
   map: string;
+  description?: string;
+  ambient?: string;
   hotspots: HotspotDef[];
   characters: CharacterDef[];
   exits: ExitDef[];
+}
+
+export interface CombineDef {
+  itemA: string;
+  itemB: string;
+  actions: Action[];
+  text: string;
 }
 
 export interface AdventureData {
@@ -65,6 +75,7 @@ export interface AdventureData {
   startScene: string;
   items: Record<string, ItemDef>;
   scenes: Record<string, SceneDef>;
+  combinations?: CombineDef[];
 }
 
 export interface GameState {
@@ -80,7 +91,7 @@ export interface InteractionResult {
 }
 
 export interface InteractionEvent {
-  verb: 'use' | 'talk' | 'take' | 'exit';
+  verb: 'use' | 'talk' | 'take' | 'exit' | 'look';
   targetId: string;
   condition?: Condition & { result: boolean };
   actions: Action[];

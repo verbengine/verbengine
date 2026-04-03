@@ -8,6 +8,7 @@ import type {
   Action,
   AdventureData,
   CharacterDef,
+  CombineDef,
   Condition,
   ConditionalInteraction,
   ExitDef,
@@ -32,6 +33,7 @@ type TokenType =
   | 'colon'
   | 'comma'
   | 'arrow'
+  | 'plus'
   | 'eof';
 
 interface Token {
@@ -44,6 +46,7 @@ const KEYWORDS = new Set([
   'adventure',
   'start',
   'items',
+  'combine',
   'scene',
   'hotspot',
   'character',
@@ -61,6 +64,8 @@ const KEYWORDS = new Set([
   'locked',
   'has',
   'flag',
+  'ambient',
+  'sound',
 ]);
 
 // --- Tokenizer ---
@@ -157,6 +162,7 @@ function tokenize(source: string): Token[] {
       ')': 'rparen',
       ':': 'colon',
       ',': 'comma',
+      '+': 'plus',
     };
 
     if (singleTokens[ch]) {
@@ -199,6 +205,7 @@ class Parser {
     let startScene = '';
     let items: Record<string, ItemDef> = {};
     const scenes: Record<string, SceneDef> = {};
+    const combinations: CombineDef[] = [];
 
     while (!this.check('rbrace')) {
       const token = this.peek();
@@ -209,6 +216,8 @@ class Parser {
         startScene = this.expectIdentifier();
       } else if (token.type === 'keyword' && token.value === 'items') {
         items = this.parseItems();
+      } else if (token.type === 'keyword' && token.value === 'combine') {
+        combinations.push(this.parseCombine());
       } else if (token.type === 'keyword' && token.value === 'scene') {
         const scene = this.parseScene();
         scenes[scene.id] = scene;
@@ -223,7 +232,28 @@ class Parser {
       throw new Error('Missing start scene declaration');
     }
 
-    return { title, startScene, items, scenes };
+    const result: AdventureData = { title, startScene, items, scenes };
+    if (combinations.length > 0) {
+      result.combinations = combinations;
+    }
+    return result;
+  }
+
+  // --- Combine ---
+
+  private parseCombine(): CombineDef {
+    this.expect('keyword', 'combine');
+    const itemA = this.expectIdentifier();
+    this.expect('plus');
+    const itemB = this.expectIdentifier();
+
+    const actions: Action[] = [];
+    while (this.check('arrow')) {
+      actions.push(this.parseAction());
+    }
+
+    const text = this.expectString();
+    return { itemA, itemB, actions, text };
   }
 
   // --- Items ---
@@ -272,6 +302,8 @@ class Parser {
     this.expect('lbrace');
 
     let map = '';
+    let description: string | undefined;
+    let ambient: string | undefined;
     const hotspots: HotspotDef[] = [];
     const characters: CharacterDef[] = [];
     const exits: ExitDef[] = [];
@@ -283,6 +315,14 @@ class Parser {
         this.advance();
         this.expect('colon');
         map = this.expectString();
+      } else if (token.type === 'keyword' && token.value === 'description') {
+        this.advance();
+        this.expect('colon');
+        description = this.expectString();
+      } else if (token.type === 'keyword' && token.value === 'ambient') {
+        this.advance();
+        this.expect('colon');
+        ambient = this.expectString();
       } else if (token.type === 'keyword' && token.value === 'hotspot') {
         hotspots.push(this.parseHotspot());
       } else if (token.type === 'keyword' && token.value === 'character') {
@@ -295,7 +335,10 @@ class Parser {
     }
 
     this.expect('rbrace');
-    return { id, map, hotspots, characters, exits };
+    const sceneDef: SceneDef = { id, map, hotspots, characters, exits };
+    if (description !== undefined) sceneDef.description = description;
+    if (ambient !== undefined) sceneDef.ambient = ambient;
+    return sceneDef;
   }
 
   // --- Position ---
@@ -320,6 +363,7 @@ class Parser {
     let look = '';
     const use: ConditionalInteraction[] = [];
     let take: { actions: Action[]; text: string } | undefined;
+    let sound: string | undefined;
 
     while (!this.check('rbrace')) {
       const token = this.peek();
@@ -332,13 +376,20 @@ class Parser {
         use.push(this.parseConditionalInteraction('use'));
       } else if (token.type === 'keyword' && token.value === 'take') {
         take = this.parseTake();
+      } else if (token.type === 'keyword' && token.value === 'sound') {
+        this.advance();
+        this.expect('colon');
+        sound = this.expectString();
       } else {
         throw this.error(`Unexpected property '${token.value}' in hotspot '${id}'`);
       }
     }
 
     this.expect('rbrace');
-    return { id, position, look, use, take };
+    const hotspotDef: HotspotDef = { id, position, look, use };
+    if (take !== undefined) hotspotDef.take = take;
+    if (sound !== undefined) hotspotDef.sound = sound;
+    return hotspotDef;
   }
 
   // --- Character ---
