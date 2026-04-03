@@ -33,6 +33,7 @@ export interface HotspotDef {
   look: string;
   use: ConditionalInteraction[];
   take?: { actions: Action[]; text: string };
+  sound?: string;
 }
 
 export interface CharacterDef {
@@ -56,6 +57,7 @@ export interface SceneDef {
   id: string;
   map: string;
   description?: string;
+  ambient?: string;
   hotspots: HotspotDef[];
   characters: CharacterDef[];
   exits: ExitDef[];
