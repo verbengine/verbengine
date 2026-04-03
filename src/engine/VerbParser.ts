@@ -272,6 +272,7 @@ class Parser {
     this.expect('lbrace');
 
     let map = '';
+    let description: string | undefined;
     const hotspots: HotspotDef[] = [];
     const characters: CharacterDef[] = [];
     const exits: ExitDef[] = [];
@@ -283,6 +284,10 @@ class Parser {
         this.advance();
         this.expect('colon');
         map = this.expectString();
+      } else if (token.type === 'keyword' && token.value === 'description') {
+        this.advance();
+        this.expect('colon');
+        description = this.expectString();
       } else if (token.type === 'keyword' && token.value === 'hotspot') {
         hotspots.push(this.parseHotspot());
       } else if (token.type === 'keyword' && token.value === 'character') {
@@ -295,7 +300,9 @@ class Parser {
     }
 
     this.expect('rbrace');
-    return { id, map, hotspots, characters, exits };
+    const sceneDef: SceneDef = { id, map, hotspots, characters, exits };
+    if (description !== undefined) sceneDef.description = description;
+    return sceneDef;
   }
 
   // --- Position ---

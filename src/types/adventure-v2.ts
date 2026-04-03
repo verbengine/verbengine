@@ -55,6 +55,7 @@ export interface ExitDef {
 export interface SceneDef {
   id: string;
   map: string;
+  description?: string;
   hotspots: HotspotDef[];
   characters: CharacterDef[];
   exits: ExitDef[];

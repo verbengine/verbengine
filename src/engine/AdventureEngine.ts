@@ -55,6 +55,10 @@ export class AdventureEngine {
     return this.adventure.scenes[this.state.currentScene];
   }
 
+  getSceneDescription(): string | undefined {
+    return this.getCurrentScene().description;
+  }
+
   getInventory(): string[] {
     return [...this.state.inventory];
   }

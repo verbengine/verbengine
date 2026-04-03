@@ -422,6 +422,64 @@ describe('VerbParser', () => {
     expect(data.scenes['b'].exits[0].target).toBe('a');
   });
 
+  // --- Scene description ---
+
+  it('parses scene with description field', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "m"
+          description: "A dusty old room with peeling wallpaper."
+        }
+      }
+    `);
+    expect(data.scenes['room'].description).toBe('A dusty old room with peeling wallpaper.');
+  });
+
+  it('leaves scene description undefined when not present', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "m"
+        }
+      }
+    `);
+    expect(data.scenes['room'].description).toBeUndefined();
+  });
+
+  it('parses scene description alongside other scene properties', () => {
+    const data = parseVerb(`
+      adventure "Test" {
+        start: room
+        items {}
+        scene room {
+          map: "test_map"
+          description: "The entrance hall."
+          hotspot door [1, 1] {
+            look: "A door."
+            use: "It won't budge."
+          }
+          exit hallway [5, 0] {
+            target: hallway
+            look: "To the hallway."
+          }
+        }
+        scene hallway {
+          map: "hall_map"
+        }
+      }
+    `);
+    const room = data.scenes['room'];
+    expect(room.map).toBe('test_map');
+    expect(room.description).toBe('The entrance hall.');
+    expect(room.hotspots).toHaveLength(1);
+    expect(room.exits).toHaveLength(1);
+  });
+
   // --- Comments ---
 
   it('ignores single-line comments', () => {

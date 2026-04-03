@@ -176,6 +176,28 @@ describe('AdventureEngine', () => {
     expect(scene.map).toBe('office_main');
   });
 
+  // --- Scene description ---
+
+  it('should return scene description when present', () => {
+    const adventure = buildTestAdventure();
+    adventure.scenes['oficina'].description = 'The bustling office floor.';
+    const engine = new AdventureEngine(adventure);
+    expect(engine.getSceneDescription()).toBe('The bustling office floor.');
+  });
+
+  it('should return undefined for scene without description', () => {
+    const engine = new AdventureEngine(buildTestAdventure());
+    expect(engine.getSceneDescription()).toBeUndefined();
+  });
+
+  it('should return description for the current scene after scene change', () => {
+    const adventure = buildTestAdventure();
+    adventure.scenes['pasillo'].description = 'A long empty corridor.';
+    const engine = new AdventureEngine(adventure);
+    engine.executeActions([{ type: 'go', target: 'pasillo' }]);
+    expect(engine.getSceneDescription()).toBe('A long empty corridor.');
+  });
+
   // --- Inventory ---
 
   it('should add items to inventory via get action', () => {
