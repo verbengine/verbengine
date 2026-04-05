@@ -28,7 +28,9 @@ describe('VerbEngine bootstrap', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
 
     expect(pkg.name).toBe('verbengine');
-    expect(pkg.version).toBe('0.1.0');
+    // Read version dynamically so this test survives releases
+    expect(typeof pkg.version).toBe('string');
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(pkg.type).toBe('module');
     expect(pkg.license).toBe('MIT');
     expect(pkg.scripts.dev).toBeDefined();

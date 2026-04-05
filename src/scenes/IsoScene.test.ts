@@ -213,13 +213,16 @@ describe('IsoScene source structure', () => {
     expect(src).toContain("this.load.image(FLOOR_KEY");
     expect(src).toContain("this.load.image('tile-wall-plain'");
     expect(src).toContain("this.load.image('tile-wall-window'");
-    expect(src).toContain("this.load.spritesheet('char_0'");
+    // Spritesheets are loaded via a loop over an array — check that the loop and key exist
+    expect(src).toContain("this.load.spritesheet(sprite,");
+    expect(src).toContain("'char_0'");
   });
 
   it('uses Phaser Image objects for tiles with correct origins', () => {
     const src = readSource();
     expect(src).toContain('this.add.image(');
-    expect(src).toContain('setScale(ZOOM)');
+    // Tiles are scaled via NANO_SCALE (derived from ZOOM); no direct setScale(ZOOM) after refactor
+    expect(src).toContain('setScale(NANO_SCALE)');
     expect(src).not.toContain('drawDiamond');
     // Floor tiles use origin (0.5, 0) — top-center aligned with diamond top point
     expect(src).toContain('setOrigin(0.5, 0)');
