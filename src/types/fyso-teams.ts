@@ -4,6 +4,7 @@
 
 export type AgentStatus =
   | 'idle'
+  | 'wander'
   | 'working'
   | 'talking'
   | 'walking'

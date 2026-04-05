@@ -39,6 +39,7 @@ const WALKABLE_TILES = [0, 4];
 /** Status badge colors per status */
 const STATUS_COLORS: Record<AgentStatus, number> = {
   idle: 0x888888,
+  wander: 0x9c27b0,
   working: 0x4caf50,
   talking: 0x2196f3,
   walking: 0xff9800,
@@ -46,28 +47,34 @@ const STATUS_COLORS: Record<AgentStatus, number> = {
   error: 0xf44336,
 };
 
+/**
+ * Statuses that represent a persistent *behavior* (vs. transient animation
+ * states like `walking` and `talking`). When movement or talking finishes,
+ * the agent returns to its behavior status.
+ */
+const BEHAVIOR_STATUSES: ReadonlySet<AgentStatus> = new Set([
+  'idle',
+  'wander',
+  'working',
+  'done',
+  'error',
+]);
+
 /** Badge radius in pixels (pre-zoom) */
 const BADGE_RADIUS = 4;
 
-/** Convert a hue angle (0-360) to a Phaser tint (0xRRGGBB) via HSL→RGB at S=0.5, L=0.75 */
-function hueToTint(hue: number): number {
-  const h = ((hue % 360) + 360) % 360;
-  const s = 0.45;
-  const l = 0.78;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60)       { r = c; g = x; b = 0; }
-  else if (h < 120) { r = x; g = c; b = 0; }
-  else if (h < 180) { r = 0; g = c; b = x; }
-  else if (h < 240) { r = 0; g = x; b = c; }
-  else if (h < 300) { r = x; g = 0; b = c; }
-  else              { r = c; g = 0; b = x; }
-  const ri = Math.round((r + m) * 255);
-  const gi = Math.round((g + m) * 255);
-  const bi = Math.round((b + m) * 255);
-  return (ri << 16) | (gi << 8) | bi;
+/** Wander behavior: max distance (in tiles) from current position when picking a target. */
+const WANDER_RADIUS = 3;
+/** Wander behavior: min pause between wander ticks (ms). */
+const WANDER_MIN_PAUSE_MS = 2000;
+/** Wander behavior: max pause between wander ticks (ms). */
+const WANDER_MAX_PAUSE_MS = 6000;
+/** Wander behavior: attempts to find a walkable target before giving up on a tick. */
+const WANDER_PICK_ATTEMPTS = 10;
+
+/** Normalize a hue angle to [0, 360). */
+function normalizeHue(hue: number): number {
+  return ((hue % 360) + 360) % 360;
 }
 
 /** Depth layers */
@@ -116,10 +123,17 @@ interface AgentState {
   label: Phaser.GameObjects.Text;
   badge: Phaser.GameObjects.Graphics;
   status: AgentStatus;
+  /**
+   * Persistent behavior status to return to after transient states
+   * (walking/talking) end. Mirrors `status` when `status` is itself a
+   * behavior status.
+   */
+  baseStatus: AgentStatus;
   currentX: number;
   currentY: number;
   isMoving: boolean;
   activeTween?: Phaser.Tweens.Tween;
+  wanderEvent?: Phaser.Time.TimerEvent;
 }
 
 // ── Scene ─────────────────────────────────────────────────────────
@@ -203,22 +217,18 @@ export class FysoTeamsScene extends Phaser.Scene {
 
     const status: AgentStatus = def.status ?? 'idle';
 
-    this.setupAgentAnimations(def.sprite);
+    const effectiveSprite = this.getHueShiftedSpriteKey(def.sprite, def.hueShift ?? 0);
+    this.setupAgentAnimations(effectiveSprite);
 
     const { x, y } = this.gridToScreen(def.gridX, def.gridY);
     const sx = Math.round(x);
     const sy = Math.round(y + this.tileHeight / 2);
 
-    const sprite = this.add.sprite(sx, sy, def.sprite, 0);
+    const sprite = this.add.sprite(sx, sy, effectiveSprite, 0);
     sprite.setScale(this.charScale);
     sprite.setOrigin(0.5, 1.0);
     sprite.setDepth(def.gridY + def.gridX + SPRITE_DEPTH_OFFSET);
-    sprite.play(`${def.sprite}-idle-south`);
-
-    // Apply hue shift as a color tint
-    if (def.hueShift && def.hueShift !== 0) {
-      sprite.setTint(hueToTint(def.hueShift));
-    }
+    sprite.play(`${effectiveSprite}-idle-south`);
 
     const labelY = sy - CHAR_H * this.charScale - 5;
     const label = this.add
@@ -236,18 +246,25 @@ export class FysoTeamsScene extends Phaser.Scene {
     badge.setDepth(def.gridY + def.gridX + BADGE_DEPTH_OFFSET);
     this.drawBadge(badge, sx, labelY - 10, status);
 
+    const baseStatus: AgentStatus = BEHAVIOR_STATUSES.has(status) ? status : 'idle';
+
     const state: AgentState = {
-      def: { ...def },
+      def: { ...def, sprite: effectiveSprite },
       sprite,
       label,
       badge,
       status,
+      baseStatus,
       currentX: def.gridX,
       currentY: def.gridY,
       isMoving: false,
     };
 
     this.agents.set(def.id, state);
+
+    if (baseStatus === 'wander') {
+      this.scheduleWanderTick(state);
+    }
   }
 
   removeAgent(id: string): void {
@@ -255,6 +272,7 @@ export class FysoTeamsScene extends Phaser.Scene {
     if (!agent) return;
 
     agent.activeTween?.stop();
+    agent.wanderEvent?.remove();
     agent.sprite.destroy();
     agent.label.destroy();
     agent.badge.destroy();
@@ -273,8 +291,12 @@ export class FysoTeamsScene extends Phaser.Scene {
       targetX,
       targetY,
       (path) => {
+        // Guard against the agent being removed while easystar was
+        // resolving the path asynchronously — its sprite/label/badge
+        // would already be destroyed.
+        if (!this.agents.has(id)) return;
         if (!path || path.length < 2) {
-          this.setAgentStatus(id, 'idle');
+          this.setAgentStatus(id, agent.baseStatus);
           return;
         }
         this.moveAgentAlongPath(agent, path.slice(1));
@@ -286,6 +308,22 @@ export class FysoTeamsScene extends Phaser.Scene {
     const agent = this.agents.get(id);
     if (!agent) return;
 
+    // Update baseStatus only when transitioning to a persistent behavior.
+    // Transient states (walking/talking) leave baseStatus untouched so the
+    // agent can return to its behavior after movement or dialogue ends.
+    if (BEHAVIOR_STATUSES.has(status)) {
+      const wasWander = agent.baseStatus === 'wander';
+      const willWander = status === 'wander';
+      agent.baseStatus = status;
+
+      if (willWander && !wasWander) {
+        this.scheduleWanderTick(agent);
+      } else if (!willWander && wasWander) {
+        agent.wanderEvent?.remove();
+        agent.wanderEvent = undefined;
+      }
+    }
+
     agent.status = status;
     const { x, y } = agent.sprite;
     const labelY = y - CHAR_H * this.charScale - 5;
@@ -296,7 +334,6 @@ export class FysoTeamsScene extends Phaser.Scene {
     const agent = this.agents.get(id);
     if (!agent) return;
 
-    const previousStatus = agent.status;
     const { x, y } = agent.sprite;
     const bubbleY = y - CHAR_H * this.charScale - 20;
     const ms = duration ?? 3000;
@@ -305,8 +342,11 @@ export class FysoTeamsScene extends Phaser.Scene {
     this.setAgentStatus(id, 'talking');
 
     this.time.delayedCall(ms, () => {
+      // Restore the persistent behavior status rather than whatever
+      // transient status the agent had before talking — capturing
+      // `agent.status` directly would re-enter a stale 'walking' state.
       if (this.agents.has(id) && agent.status === 'talking') {
-        this.setAgentStatus(id, previousStatus);
+        this.setAgentStatus(id, agent.baseStatus);
       }
     });
   }
@@ -328,10 +368,110 @@ export class FysoTeamsScene extends Phaser.Scene {
     if (this.input.keyboard) this.input.keyboard.enabled = false;
   }
 
+  // ── Wander behavior ───────────────────────────────────────────
+
+  /**
+   * Schedule the next wander tick for an agent. Uses a random delay between
+   * WANDER_MIN_PAUSE_MS and WANDER_MAX_PAUSE_MS. Each tick re-arms itself, so
+   * the behavior runs indefinitely until the agent is removed or its `wander`
+   * flag is cleared.
+   */
+  private scheduleWanderTick(agent: AgentState, delayMs?: number): void {
+    const delay =
+      delayMs ?? Phaser.Math.Between(WANDER_MIN_PAUSE_MS, WANDER_MAX_PAUSE_MS);
+    agent.wanderEvent = this.time.delayedCall(delay, () => this.tickWander(agent));
+  }
+
+  /**
+   * Wander tick: if the agent is idle and wander is still enabled, pick a
+   * random walkable tile within WANDER_RADIUS and move there. Always
+   * reschedules itself.
+   */
+  private tickWander(agent: AgentState): void {
+    if (!this.agents.has(agent.def.id)) return;
+    if (agent.baseStatus !== 'wander') return;
+
+    if (!agent.isMoving && agent.status !== 'talking') {
+      const target = this.pickRandomWalkableTile(
+        agent.currentX,
+        agent.currentY,
+        WANDER_RADIUS,
+      );
+      if (target) {
+        this.moveAgent(agent.def.id, target.x, target.y);
+      }
+    }
+
+    this.scheduleWanderTick(agent);
+  }
+
+  /**
+   * Pick a random walkable tile within `radius` of (cx, cy). Returns null if
+   * no walkable tile can be found after WANDER_PICK_ATTEMPTS tries.
+   */
+  private pickRandomWalkableTile(
+    cx: number,
+    cy: number,
+    radius: number,
+  ): { x: number; y: number } | null {
+    for (let i = 0; i < WANDER_PICK_ATTEMPTS; i++) {
+      const dx = Phaser.Math.Between(-radius, radius);
+      const dy = Phaser.Math.Between(-radius, radius);
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x === cx && y === cy) continue;
+      if (x < 0 || x >= this.mapCols || y < 0 || y >= this.mapRows) continue;
+      const tile = this.mapData[y][x];
+      if (!WALKABLE_TILES.includes(tile)) continue;
+      return { x, y };
+    }
+    return null;
+  }
+
   // ── Animations ────────────────────────────────────────────────
 
   private setupAgentAnimations(spriteKey: string): void {
     this.createCharacterAnimations(spriteKey);
+  }
+
+  /**
+   * Return a sprite key for a hue-shifted variant of `baseKey`. If `hueShift`
+   * is 0, the base key is returned unchanged. Otherwise, the base spritesheet
+   * image is drawn to an offscreen canvas with `filter: hue-rotate(Xdeg)` and
+   * registered as a new Phaser spritesheet texture. Results are cached, so
+   * subsequent calls with the same arguments reuse the same texture.
+   *
+   * Mirrors the approach used in fyso_world's renderer (getHueShiftedSprite).
+   */
+  private getHueShiftedSpriteKey(baseKey: string, hueShift: number): string {
+    const hue = normalizeHue(hueShift);
+    if (hue === 0) return baseKey;
+
+    const variantKey = `${baseKey}-hue-${hue}`;
+    if (this.textures.exists(variantKey)) return variantKey;
+
+    const baseTexture = this.textures.get(baseKey);
+    const source = baseTexture.getSourceImage(0) as HTMLImageElement | HTMLCanvasElement;
+    if (!source) return baseKey;
+
+    const width = (source as HTMLImageElement).naturalWidth ?? source.width;
+    const height = (source as HTMLImageElement).naturalHeight ?? source.height;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return baseKey;
+    ctx.imageSmoothingEnabled = false;
+    ctx.filter = `hue-rotate(${hue}deg)`;
+    ctx.drawImage(source, 0, 0);
+
+    this.textures.addSpriteSheet(variantKey, canvas as unknown as HTMLImageElement, {
+      frameWidth: CHAR_W,
+      frameHeight: CHAR_H,
+    });
+
+    return variantKey;
   }
 
   private createCharacterAnimations(spriteKey: string): void {
@@ -541,7 +681,8 @@ export class FysoTeamsScene extends Phaser.Scene {
       agent.isMoving = false;
       const spriteKey = agent.def.sprite;
       agent.sprite.play(`${spriteKey}-idle-south`);
-      const prevStatus = agent.status === 'walking' ? 'idle' : agent.status;
+      const prevStatus =
+        agent.status === 'walking' ? agent.baseStatus : agent.status;
       this.setAgentStatus(agent.def.id, prevStatus);
       return;
     }

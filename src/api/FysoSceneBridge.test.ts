@@ -118,7 +118,7 @@ describe('FysoSceneBridge', () => {
     });
 
     it('can set every valid status', () => {
-      const statuses = ['idle', 'working', 'talking', 'walking', 'done', 'error'] as const;
+      const statuses = ['idle', 'wander', 'working', 'talking', 'walking', 'done', 'error'] as const;
       for (const status of statuses) {
         bridge.setAgentStatus('agent-1', status);
       }

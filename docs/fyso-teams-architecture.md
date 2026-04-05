@@ -68,19 +68,30 @@ spawnAgent()
     v
 [sprite + label + badge created at gridX, gridY]
     |
-    +--- setAgentStatus()  → redraws badge colour, status persists in AgentState
+    +--- setAgentStatus()  → redraws badge, updates baseStatus on behavior
+    |                        transitions (idle/wander/working/done/error),
+    |                        starts/stops the wander timer
     |
     +--- showAgentMessage()
     |       |
-    |       +→ status = 'talking' (temporary, reverts after duration)
+    |       +→ status = 'talking' (transient, reverts to baseStatus)
     |       +→ BubbleText.showNamedBubble()
     |
     +--- moveAgent()
     |       |
-    |       +→ status = 'walking'
+    |       +→ status = 'walking' (transient)
     |       +→ EasyStar.findPath() (async, resolved in update loop)
+    |       +→ callback guards against removeAgent mid-flight
     |       +→ moveAgentAlongPath() (recursive tween chain)
-    |       +→ on arrival: status = 'idle'
+    |       +→ on arrival: status = baseStatus (idle, wander, working, …)
+    |
+    +--- wander loop (when baseStatus === 'wander')
+    |       |
+    |       +→ scheduleWanderTick() — delayedCall 2–6 s, stored on agent
+    |       +→ tickWander() — picks random walkable tile in radius 3,
+    |       |                  calls moveAgent, reschedules itself
+    |       +→ cancelled by removeAgent() and by setAgentStatus() when
+    |          transitioning out of 'wander'
     |
     +--- focusAgent()  → camera.startFollow(sprite)
     |
