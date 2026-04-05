@@ -4,6 +4,7 @@
 
 export type AgentStatus =
   | 'idle'
+  | 'wander'
   | 'working'
   | 'talking'
   | 'walking'
@@ -17,6 +18,8 @@ export interface AgentDef {
   gridX: number;
   gridY: number;
   status?: AgentStatus;
+  /** Hue rotation in degrees (0-360). Applied as a color tint. */
+  hueShift?: number;
 }
 
 export interface FysoGameOptions {

@@ -38,6 +38,7 @@ bridge.spawnAgent({
   gridX: 5,
   gridY: 5,
   status: 'idle',
+  hueShift: 120,      // optional: recolor the sprite via hue rotation
 });
 
 // 3. Move the agent to another tile via pathfinding.
@@ -45,6 +46,11 @@ bridge.moveAgent('alice', 12, 8);
 
 // 4. Show a speech bubble for 4 seconds.
 bridge.showAgentMessage('alice', 'Hello, office!', 4000);
+
+// 5. Let the agent wander automatically around nearby walkable tiles.
+//    Setting the status to 'wander' enables the automatic loop; any other
+//    behavior status (idle/working/done) stops it.
+bridge.setAgentStatus('alice', 'wander');
 ```
 
 The built-in 25x25 office map loads automatically. Four character spritesheets (`char_0`–`char_3`) are included. No extra configuration is required for a local dev server that serves assets from `/assets/`.
