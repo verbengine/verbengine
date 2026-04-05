@@ -49,6 +49,27 @@ const STATUS_COLORS: Record<AgentStatus, number> = {
 /** Badge radius in pixels (pre-zoom) */
 const BADGE_RADIUS = 4;
 
+/** Convert a hue angle (0-360) to a Phaser tint (0xRRGGBB) via HSL→RGB at S=0.5, L=0.75 */
+function hueToTint(hue: number): number {
+  const h = ((hue % 360) + 360) % 360;
+  const s = 0.45;
+  const l = 0.78;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60)       { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  const ri = Math.round((r + m) * 255);
+  const gi = Math.round((g + m) * 255);
+  const bi = Math.round((b + m) * 255);
+  return (ri << 16) | (gi << 8) | bi;
+}
+
 /** Depth layers */
 const BADGE_DEPTH_OFFSET = 1.0;
 const LABEL_DEPTH_OFFSET = 0.9;
@@ -193,6 +214,11 @@ export class FysoTeamsScene extends Phaser.Scene {
     sprite.setOrigin(0.5, 1.0);
     sprite.setDepth(def.gridY + def.gridX + SPRITE_DEPTH_OFFSET);
     sprite.play(`${def.sprite}-idle-south`);
+
+    // Apply hue shift as a color tint
+    if (def.hueShift && def.hueShift !== 0) {
+      sprite.setTint(hueToTint(def.hueShift));
+    }
 
     const labelY = sy - CHAR_H * this.charScale - 5;
     const label = this.add
