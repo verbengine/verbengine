@@ -35,8 +35,7 @@ function agentDef(overrides?: Partial<AgentDef>): AgentDef {
     id: 'agent-1',
     name: 'Alice',
     sprite: 'char_0',
-    gridX: 3,
-    gridY: 3,
+    pod: { x: 2, y: 2, w: 3, h: 3 },
     ...overrides,
   };
 }
@@ -65,14 +64,13 @@ describe('FysoSceneBridge', () => {
       expect(scene.spawnAgent).toHaveBeenCalledWith(def);
     });
 
-    it('passes agent id, name, sprite, and position', () => {
-      const def = agentDef({ id: 'bob', name: 'Bob', gridX: 5, gridY: 7 });
+    it('passes agent id, name, sprite, and pod', () => {
+      const def = agentDef({ id: 'bob', name: 'Bob', pod: { x: 5, y: 7, w: 4, h: 3 } });
       bridge.spawnAgent(def);
       const call = scene.spawnAgent.mock.calls[0][0] as AgentDef;
       expect(call.id).toBe('bob');
       expect(call.name).toBe('Bob');
-      expect(call.gridX).toBe(5);
-      expect(call.gridY).toBe(7);
+      expect(call.pod).toEqual({ x: 5, y: 7, w: 4, h: 3 });
     });
 
     it('throws when scene is not found', () => {

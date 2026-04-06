@@ -61,18 +61,46 @@ interface FysoGameOptions {
 
 ### Tile type values for `mapData`
 
-| Value | Tile |
-|-------|------|
-| `0` | Floor (walkable) |
-| `1` | Wall — plain |
-| `2` | Wall — window |
-| `3` | Desk |
-| `4` | Chair (walkable) |
-| `5` | Bookshelf |
-| `6` | Plant |
-| `7` | Coffee machine |
+| Value | Tile | Notes |
+|-------|------|-------|
+| `0` | Floor (walkable) | Use this for all pod areas — verbengine places desk + chair internally. |
+| `1` | Wall — plain | |
+| `2` | Wall — window | |
+| `3` | Desk (reserved) | **Do not use in `mapData`.** Verbengine writes this value internally when placing an agent's desk inside a pod. |
+| `4` | Chair (walkable) | Walkable. Can appear in `mapData` for decorative chairs outside pods. |
+| `5` | Bookshelf | |
+| `6` | Plant | |
+| `7` | Coffee machine | |
 
-Walkable tiles are `0` (floor) and `4` (chair). All other values block pathfinding.
+Walkable tiles are `0` (floor) and `4` (chair). All other values block pathfinding. Pod areas **must be floor (`0`)** at spawn time — verbengine handles desk/chair placement.
+
+---
+
+## `PodRect`
+
+Rectangular workspace assigned to an agent. The pod is the agent's private
+area: it bounds wander movement and is where verbengine places the agent's
+desk and chair automatically.
+
+```ts
+interface PodRect {
+  x: number;  // top-left column
+  y: number;  // top-left row
+  w: number;  // width in tiles (min 2)
+  h: number;  // height in tiles (min 2)
+}
+```
+
+**Placement convention.** Verbengine places a desk at the pod's center-top
+(`deskX = pod.x + floor(pod.w / 2)`, `deskY = pod.y`) and a chair immediately
+south of the desk. The desk becomes non-walkable; the chair remains walkable.
+The remaining cells stay free for wander movement.
+
+**Validation.** `spawnAgent` throws if the pod:
+- Is smaller than 2×2.
+- Falls outside the map bounds.
+- Contains any non-floor tile (walls, decorations, etc.).
+- Overlaps with another already-spawned agent's pod.
 
 ---
 
@@ -85,8 +113,7 @@ interface AgentDef {
   id: string;
   name: string;
   sprite: string;
-  gridX: number;
-  gridY: number;
+  pod: PodRect;
   status?: AgentStatus;
   hueShift?: number;
 }
@@ -97,9 +124,8 @@ interface AgentDef {
 | `id`        | `string`      | Yes | Unique identifier. Used in all subsequent bridge calls. Duplicate IDs throw on `spawnAgent`. |
 | `name`      | `string`      | Yes | Display name shown in the label above the agent. |
 | `sprite`    | `string`      | Yes | Spritesheet asset key. Built-in values: `'char_0'`, `'char_1'`, `'char_2'`, `'char_3'`. |
-| `gridX`     | `number`      | Yes | Column in the map grid (0-indexed from the top-left). |
-| `gridY`     | `number`      | Yes | Row in the map grid (0-indexed from the top-left). |
-| `status`    | `AgentStatus` | No | Initial status (both behavior and badge). Defaults to `'idle'`. Passing `'wander'` enables automatic wandering from spawn. |
+| `pod`       | `PodRect`     | Yes | Private workspace for this agent. See `PodRect` above. The agent spawns standing on its chair. |
+| `status`    | `AgentStatus` | No | Initial status (both behavior and badge). Defaults to `'idle'`. `'working'` immediately sits the agent at its desk with a laptop; `'wander'` starts automatic bounded wandering inside the pod. |
 | `hueShift`  | `number`      | No | Hue rotation in degrees (0–360). Pre-renders a hue-rotated variant of `sprite` to an offscreen canvas (via `ctx.filter = 'hue-rotate(Xdeg)'`) and registers it as a cached Phaser texture. Unlike a flat tint, this preserves luminance and sprite details. Reuse the same value across agents to share the cache. Defaults to `0` (no rotation). |
 
 ---
@@ -136,16 +162,15 @@ The badge is a filled circle rendered above the agent's name label.
 
 ### Automatic wander behavior
 
-Setting an agent's status to `'wander'` (at spawn or via `setAgentStatus`) starts an automatic loop: every 2–6 seconds, if the agent is idle (not walking, not talking), it picks a random walkable tile within 3 tiles of its current position and walks there. The loop keeps running until the status changes to anything else, or the agent is removed.
+Setting an agent's status to `'wander'` (at spawn or via `setAgentStatus`) starts an automatic loop: every 2–6 seconds, if the agent is idle (not walking, not talking), it picks a random walkable tile **inside its pod** and walks there. The loop keeps running until the status changes to anything else, or the agent is removed.
 
 ```ts
-// Spawn an agent that immediately starts wandering
+// Spawn an agent that immediately starts wandering inside its pod
 bridge.spawnAgent({
   id: 'alice',
   name: 'Alice',
   sprite: 'char_0',
-  gridX: 5,
-  gridY: 5,
+  pod: { x: 5, y: 5, w: 3, h: 3 },
   status: 'wander',
 });
 
@@ -156,7 +181,19 @@ bridge.setAgentStatus('alice', 'idle');
 bridge.setAgentStatus('alice', 'wander');
 ```
 
-No bridge method is needed beyond `setAgentStatus` — wander is driven entirely by the behavior status.
+### Automatic working behavior
+
+Setting an agent's status to `'working'` (at spawn or via `setAgentStatus`) makes the agent walk to its chair, sit down in a typing pose, and displays a laptop sprite on top of its desk. Transitioning out of `'working'` (to `'idle'`, `'wander'`, `'done'`, `'error'`, or via `moveAgent`) stands the agent back up and hides the laptop.
+
+```ts
+// Start working — agent walks to its chair and sits with a laptop
+bridge.setAgentStatus('alice', 'working');
+
+// Stop working — agent stands up, laptop disappears
+bridge.setAgentStatus('alice', 'idle');
+```
+
+No bridge method is needed beyond `setAgentStatus` — working and wander are driven entirely by the behavior status.
 
 ---
 
@@ -176,15 +213,14 @@ Adds an agent to the map.
 spawnAgent(def: AgentDef): void
 ```
 
-Throws if an agent with `def.id` is already present. The agent is placed at `(def.gridX, def.gridY)` and immediately plays its idle animation facing south.
+Throws if an agent with `def.id` is already present, or if the pod is invalid (see `PodRect` validation rules). Verbengine places a desk + chair inside the pod automatically and spawns the agent standing on the chair, facing south. If `status: 'working'` is passed, the agent sits immediately with a laptop.
 
 ```ts
 bridge.spawnAgent({
   id: 'bob',
   name: 'Bob',
   sprite: 'char_1',
-  gridX: 3,
-  gridY: 4,
+  pod: { x: 3, y: 4, w: 3, h: 3 },
   status: 'working',
 });
 ```
@@ -193,7 +229,7 @@ bridge.spawnAgent({
 
 ### `removeAgent(id)`
 
-Removes an agent from the map and destroys all its game objects (sprite, label, badge).
+Removes an agent from the map and destroys all of its game objects (sprite, label, badge, desk, chair, and laptop if working). The pod area becomes free again and can be reassigned to another agent.
 
 ```ts
 removeAgent(id: string): void
@@ -223,8 +259,10 @@ moveAgent(id: string, targetX: number, targetY: number): void
 
 Behaviour:
 - Does nothing if the agent is already moving.
+- If the agent is seated (status `'working'`), it stands up first (hides the laptop and exits the sit pose).
 - Sets the transient status to `'walking'` immediately (badge turns orange).
 - On arrival — or if no path is found — status reverts to the agent's last behavior status (`'idle'`, `'wander'`, `'working'`, …), not hardcoded `'idle'`.
+- If the agent's base status is `'working'` and it arrives at a tile **other than its chair**, it automatically walks back to its chair and sits down again.
 - Movement speed is 2.5 tiles per second.
 
 ```ts
@@ -235,7 +273,11 @@ bridge.moveAgent('alice', 10, 15);
 
 ### `setAgentStatus(id, status)`
 
-Updates the agent's status badge colour without affecting movement or animations.
+Updates the agent's status and badge colour. For behavior statuses this also drives automatic behaviors:
+
+- `'working'` — agent walks to its chair, sits down in a typing pose, and a laptop sprite appears on its desk. On exit: agent stands up and laptop is hidden.
+- `'wander'` — agent starts a bounded random-walk loop inside its pod (every 2–6 s). On exit: loop stops.
+- `'idle'`, `'done'`, `'error'` — badge-only, no automatic movement.
 
 ```ts
 setAgentStatus(id: string, status: AgentStatus): void
@@ -245,6 +287,8 @@ Does nothing if `id` does not exist.
 
 ```ts
 bridge.setAgentStatus('alice', 'working');
+// Later — stands up, laptop disappears, starts wandering in the pod
+bridge.setAgentStatus('alice', 'wander');
 ```
 
 ---

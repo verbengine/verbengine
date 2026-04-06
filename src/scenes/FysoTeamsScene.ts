@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import EasyStar from 'easystarjs';
 import { cartToIso, isoToCart } from './iso-math';
 import { BubbleText } from '../engine/BubbleText';
-import type { AgentDef, AgentStatus, FysoGameOptions } from '../types/fyso-teams';
+import type { AgentDef, AgentStatus, FysoGameOptions, PodRect } from '../types/fyso-teams';
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -23,9 +23,15 @@ const MOVE_SPEED = 2.5;
 /** Animation frame duration in ms */
 const FRAME_DURATION_MS = 150;
 
-/** Spritesheet layout: 7 cols x 3 rows, each frame 16x32 */
+/** Spritesheet layout: 7 cols x 3 rows, each frame 16x32
+ *  Columns: walk_0 | walk_1 | walk_2 | type_0 | type_1 | read_0 | read_1
+ */
 const SPRITE_COLS = 7;
 const WALK_CYCLE = [0, 1, 2, 1];
+/** Sit animation uses the 'type' frames (cols 3-4) on the south-facing row. */
+const SIT_FRAMES = [3, 4];
+/** Pixel offset applied to sitting character sprites so they rest on the chair. */
+const SIT_Y_OFFSET = 6;
 
 /** Direction indices */
 const DIR_SOUTH = 0;
@@ -33,8 +39,10 @@ const DIR_NORTH = 1;
 const DIR_EAST = 2;
 const DIR_WEST = 3;
 
-/** Walkable tile types */
+/** Walkable tile types — floor and chair. Desks (3) block pathfinding. */
 const WALKABLE_TILES = [0, 4];
+/** Minimum pod dimensions (tiles). Required to fit desk + chair. */
+const MIN_POD_DIM = 2;
 
 /** Status badge colors per status */
 const STATUS_COLORS: Record<AgentStatus, number> = {
@@ -63,8 +71,6 @@ const BEHAVIOR_STATUSES: ReadonlySet<AgentStatus> = new Set([
 /** Badge radius in pixels (pre-zoom) */
 const BADGE_RADIUS = 4;
 
-/** Wander behavior: max distance (in tiles) from current position when picking a target. */
-const WANDER_RADIUS = 3;
 /** Wander behavior: min pause between wander ticks (ms). */
 const WANDER_MIN_PAUSE_MS = 2000;
 /** Wander behavior: max pause between wander ticks (ms). */
@@ -75,6 +81,16 @@ const WANDER_PICK_ATTEMPTS = 10;
 /** Normalize a hue angle to [0, 360). */
 function normalizeHue(hue: number): number {
   return ((hue % 360) + 360) % 360;
+}
+
+/** Return true if two axis-aligned pod rectangles overlap. */
+function podsOverlap(a: PodRect, b: PodRect): boolean {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  );
 }
 
 /** Depth layers */
@@ -132,6 +148,19 @@ interface AgentState {
   currentX: number;
   currentY: number;
   isMoving: boolean;
+  /** Whether the agent sprite is currently in the seated (typing) pose. */
+  isSeated: boolean;
+  pod: PodRect;
+  /** Tile where the agent's desk is rendered (non-walkable). */
+  deskTile: { x: number; y: number };
+  /** Tile where the agent sits when working (walkable). */
+  chairTile: { x: number; y: number };
+  /** Desk sprite rendered above the pod. Destroyed on removeAgent. */
+  deskImage: Phaser.GameObjects.Image;
+  /** Chair sprite rendered under the agent. Destroyed on removeAgent. */
+  chairImage: Phaser.GameObjects.Image;
+  /** Laptop sprite — only present while status is 'working'. */
+  laptopImage?: Phaser.GameObjects.Image;
   activeTween?: Phaser.Tweens.Tween;
   wanderEvent?: Phaser.Time.TimerEvent;
 }
@@ -161,7 +190,9 @@ export class FysoTeamsScene extends Phaser.Scene {
   // ── Lifecycle ─────────────────────────────────────────────────
 
   init(data: FysoGameOptions): void {
-    this.mapData = data.mapData ?? DEFAULT_MAP_DATA;
+    // Deep clone so per-pod desk placement doesn't mutate the consumer's map.
+    const source = data.mapData ?? DEFAULT_MAP_DATA;
+    this.mapData = source.map((row) => row.slice());
     this.mapRows = this.mapData.length;
     this.mapCols = this.mapData[0]?.length ?? 0;
     this.zoom = data.zoom ?? DEFAULT_ZOOM;
@@ -180,6 +211,8 @@ export class FysoTeamsScene extends Phaser.Scene {
     this.load.image('fyso-wall-plain', `${base}/assets/tiles/wall_nano.png`);
     this.load.image('fyso-wall-window', `${base}/assets/tiles/wall_window_nano.png`);
     this.load.image('fyso-desk', `${base}/assets/tiles/desk.png`);
+    this.load.image('fyso-chair', `${base}/assets/tiles/chair.png`);
+    this.load.image('fyso-laptop', `${base}/assets/tiles/laptop_nano.png`);
     this.load.image('fyso-bookshelf', `${base}/assets/tiles/bookshelf_nano.png`);
     this.load.image('fyso-plant', `${base}/assets/tiles/plant_nano.png`);
     this.load.image('fyso-coffee', `${base}/assets/tiles/coffee_nano.png`);
@@ -215,19 +248,61 @@ export class FysoTeamsScene extends Phaser.Scene {
       throw new Error(`Agent '${def.id}' is already spawned.`);
     }
 
+    this.validatePod(def.id, def.pod);
+
+    // Place desk + chair in the pod. Desk goes at the center-top so the
+    // chair (immediately south of it) leaves the rest of the pod free for
+    // wandering.
+    const deskX = def.pod.x + Math.floor(def.pod.w / 2);
+    const deskY = def.pod.y;
+    const chairX = deskX;
+    const chairY = deskY + 1;
+
+    if (chairY >= def.pod.y + def.pod.h) {
+      throw new Error(
+        `Agent '${def.id}' pod is too short to place a chair below the desk.`,
+      );
+    }
+
+    // Block the desk tile for pathfinding. The chair stays walkable.
+    this.mapData[deskY][deskX] = 3;
+    this.easystar.setGrid(this.mapData);
+
+    const deskScreen = this.gridToScreen(deskX, deskY);
+    const deskImage = this.add.image(
+      Math.round(deskScreen.x),
+      Math.round(deskScreen.y + this.tileHeight / 2),
+      'fyso-desk',
+    );
+    deskImage.setScale(this.nanoScale);
+    deskImage.setOrigin(0.5, 0.5);
+    deskImage.setDepth(deskY + deskX + 0.5);
+
+    const chairScreen = this.gridToScreen(chairX, chairY);
+    const chairImage = this.add.image(
+      Math.round(chairScreen.x),
+      Math.round(chairScreen.y + this.tileHeight / 2),
+      'fyso-chair',
+    );
+    chairImage.setScale(this.nanoScale);
+    chairImage.setOrigin(0.5, 0.5);
+    // Chair sits behind the agent but in front of the floor.
+    chairImage.setDepth(chairY + chairX + 0.4);
+
     const status: AgentStatus = def.status ?? 'idle';
 
     const effectiveSprite = this.getHueShiftedSpriteKey(def.sprite, def.hueShift ?? 0);
     this.setupAgentAnimations(effectiveSprite);
 
-    const { x, y } = this.gridToScreen(def.gridX, def.gridY);
+    // Spawn at the chair tile.
+    const { x, y } = this.gridToScreen(chairX, chairY);
     const sx = Math.round(x);
     const sy = Math.round(y + this.tileHeight / 2);
 
     const sprite = this.add.sprite(sx, sy, effectiveSprite, 0);
     sprite.setScale(this.charScale);
     sprite.setOrigin(0.5, 1.0);
-    sprite.setDepth(def.gridY + def.gridX + SPRITE_DEPTH_OFFSET);
+    sprite.setDepth(chairY + chairX + SPRITE_DEPTH_OFFSET);
     sprite.play(`${effectiveSprite}-idle-south`);
 
     const labelY = sy - CHAR_H * this.charScale - 5;
@@ -240,10 +315,10 @@ export class FysoTeamsScene extends Phaser.Scene {
         padding: { x: 3, y: 1 },
       })
       .setOrigin(0.5, 1.0)
-      .setDepth(def.gridY + def.gridX + LABEL_DEPTH_OFFSET);
+      .setDepth(chairY + chairX + LABEL_DEPTH_OFFSET);
 
     const badge = this.add.graphics();
-    badge.setDepth(def.gridY + def.gridX + BADGE_DEPTH_OFFSET);
+    badge.setDepth(chairY + chairX + BADGE_DEPTH_OFFSET);
     this.drawBadge(badge, sx, labelY - 10, status);
 
     const baseStatus: AgentStatus = BEHAVIOR_STATUSES.has(status) ? status : 'idle';
@@ -255,15 +330,66 @@ export class FysoTeamsScene extends Phaser.Scene {
       badge,
       status,
       baseStatus,
-      currentX: def.gridX,
-      currentY: def.gridY,
+      currentX: chairX,
+      currentY: chairY,
       isMoving: false,
+      isSeated: false,
+      pod: def.pod,
+      deskTile: { x: deskX, y: deskY },
+      chairTile: { x: chairX, y: chairY },
+      deskImage,
+      chairImage,
     };
 
     this.agents.set(def.id, state);
 
-    if (baseStatus === 'wander') {
+    if (baseStatus === 'working') {
+      this.enterWorkingState(state);
+    } else if (baseStatus === 'wander') {
       this.scheduleWanderTick(state);
+    }
+  }
+
+  // ── Pod validation ────────────────────────────────────────────
+
+  /**
+   * Validate a pod before spawning: dimensions, map bounds, walkability, and
+   * non-overlap with other agents' pods. Throws with a descriptive message on
+   * failure so library consumers get a clear error.
+   */
+  private validatePod(agentId: string, pod: PodRect): void {
+    if (pod.w < MIN_POD_DIM || pod.h < MIN_POD_DIM) {
+      throw new Error(
+        `Agent '${agentId}' pod must be at least ${MIN_POD_DIM}x${MIN_POD_DIM} tiles (got ${pod.w}x${pod.h}).`,
+      );
+    }
+    if (
+      pod.x < 0 ||
+      pod.y < 0 ||
+      pod.x + pod.w > this.mapCols ||
+      pod.y + pod.h > this.mapRows
+    ) {
+      throw new Error(
+        `Agent '${agentId}' pod (${pod.x},${pod.y} ${pod.w}x${pod.h}) is outside the map bounds (${this.mapCols}x${this.mapRows}).`,
+      );
+    }
+
+    for (let y = pod.y; y < pod.y + pod.h; y++) {
+      for (let x = pod.x; x < pod.x + pod.w; x++) {
+        if (!WALKABLE_TILES.includes(this.mapData[y][x])) {
+          throw new Error(
+            `Agent '${agentId}' pod cell (${x},${y}) is not walkable (tile=${this.mapData[y][x]}).`,
+          );
+        }
+      }
+    }
+
+    for (const [otherId, other] of this.agents) {
+      if (podsOverlap(pod, other.pod)) {
+        throw new Error(
+          `Agent '${agentId}' pod overlaps with agent '${otherId}'.`,
+        );
+      }
     }
   }
 
@@ -276,12 +402,26 @@ export class FysoTeamsScene extends Phaser.Scene {
     agent.sprite.destroy();
     agent.label.destroy();
     agent.badge.destroy();
+    agent.deskImage.destroy();
+    agent.chairImage.destroy();
+    agent.laptopImage?.destroy();
+
+    // Free the desk tile so the pod area becomes walkable again.
+    this.mapData[agent.deskTile.y][agent.deskTile.x] = 0;
+    this.easystar.setGrid(this.mapData);
+
     this.agents.delete(id);
   }
 
   moveAgent(id: string, targetX: number, targetY: number): void {
     const agent = this.agents.get(id);
     if (!agent || agent.isMoving) return;
+
+    // Can't walk while seated — stand up first. The laptop stays visible
+    // only while baseStatus is 'working'; standUp is idempotent.
+    if (agent.isSeated) {
+      this.standUp(agent);
+    }
 
     this.setAgentStatus(id, 'walking');
 
@@ -312,15 +452,22 @@ export class FysoTeamsScene extends Phaser.Scene {
     // Transient states (walking/talking) leave baseStatus untouched so the
     // agent can return to its behavior after movement or dialogue ends.
     if (BEHAVIOR_STATUSES.has(status)) {
-      const wasWander = agent.baseStatus === 'wander';
-      const willWander = status === 'wander';
+      const prevBase = agent.baseStatus;
       agent.baseStatus = status;
 
-      if (willWander && !wasWander) {
+      // Wander lifecycle.
+      if (status === 'wander' && prevBase !== 'wander') {
         this.scheduleWanderTick(agent);
-      } else if (!willWander && wasWander) {
+      } else if (status !== 'wander' && prevBase === 'wander') {
         agent.wanderEvent?.remove();
         agent.wanderEvent = undefined;
+      }
+
+      // Working lifecycle — walk to the chair and sit with a laptop.
+      if (status === 'working' && prevBase !== 'working') {
+        this.enterWorkingState(agent);
+      } else if (status !== 'working' && prevBase === 'working') {
+        this.exitWorkingState(agent);
       }
     }
 
@@ -384,7 +531,7 @@ export class FysoTeamsScene extends Phaser.Scene {
 
   /**
    * Wander tick: if the agent is idle and wander is still enabled, pick a
-   * random walkable tile within WANDER_RADIUS and move there. Always
+   * random walkable tile inside the agent's pod and move there. Always
    * reschedules itself.
    */
   private tickWander(agent: AgentState): void {
@@ -392,11 +539,7 @@ export class FysoTeamsScene extends Phaser.Scene {
     if (agent.baseStatus !== 'wander') return;
 
     if (!agent.isMoving && agent.status !== 'talking') {
-      const target = this.pickRandomWalkableTile(
-        agent.currentX,
-        agent.currentY,
-        WANDER_RADIUS,
-      );
+      const target = this.pickRandomPodTile(agent);
       if (target) {
         this.moveAgent(agent.def.id, target.x, target.y);
       }
@@ -406,26 +549,86 @@ export class FysoTeamsScene extends Phaser.Scene {
   }
 
   /**
-   * Pick a random walkable tile within `radius` of (cx, cy). Returns null if
-   * no walkable tile can be found after WANDER_PICK_ATTEMPTS tries.
+   * Pick a random walkable tile inside the agent's pod (excluding the current
+   * position and the desk). Returns null if no walkable tile can be found.
    */
-  private pickRandomWalkableTile(
-    cx: number,
-    cy: number,
-    radius: number,
-  ): { x: number; y: number } | null {
+  private pickRandomPodTile(agent: AgentState): { x: number; y: number } | null {
+    const { pod, currentX, currentY } = agent;
     for (let i = 0; i < WANDER_PICK_ATTEMPTS; i++) {
-      const dx = Phaser.Math.Between(-radius, radius);
-      const dy = Phaser.Math.Between(-radius, radius);
-      const x = cx + dx;
-      const y = cy + dy;
-      if (x === cx && y === cy) continue;
-      if (x < 0 || x >= this.mapCols || y < 0 || y >= this.mapRows) continue;
+      const x = Phaser.Math.Between(pod.x, pod.x + pod.w - 1);
+      const y = Phaser.Math.Between(pod.y, pod.y + pod.h - 1);
+      if (x === currentX && y === currentY) continue;
       const tile = this.mapData[y][x];
       if (!WALKABLE_TILES.includes(tile)) continue;
       return { x, y };
     }
     return null;
+  }
+
+  // ── Working behavior (sit + laptop) ───────────────────────────
+
+  /**
+   * Transition an agent into the working state. Walks to the chair (if not
+   * already there) and sits down with a laptop. If already on the chair, sits
+   * immediately.
+   */
+  private enterWorkingState(agent: AgentState): void {
+    const { chairTile } = agent;
+    if (agent.currentX === chairTile.x && agent.currentY === chairTile.y) {
+      this.sitDown(agent);
+    } else if (!agent.isMoving) {
+      // Walk to the chair. moveAgentAlongPath's end-of-path handler detects
+      // baseStatus === 'working' and sits the agent down on arrival.
+      this.moveAgent(agent.def.id, chairTile.x, chairTile.y);
+    }
+    // If isMoving is true, the in-progress move will finish and
+    // moveAgentAlongPath will detect baseStatus === 'working' and handle
+    // the sit (or walk-to-chair) automatically.
+  }
+
+  /** Transition an agent out of the working state: stand up and hide laptop. */
+  private exitWorkingState(agent: AgentState): void {
+    this.standUp(agent);
+  }
+
+  /**
+   * Snap the agent sprite into the seated pose, draw the laptop sprite on the
+   * desk, and lock the character's south-facing typing animation.
+   */
+  private sitDown(agent: AgentState): void {
+    if (agent.isSeated) return;
+    agent.isSeated = true;
+
+    const spriteKey = agent.def.sprite;
+    agent.sprite.play(`${spriteKey}-sit-south`);
+    agent.sprite.setFlipX(false);
+    // Nudge sprite downward so the character visually rests on the chair.
+    agent.sprite.y += SIT_Y_OFFSET * this.charScale;
+
+    // Draw the laptop on top of the desk.
+    const deskScreen = this.gridToScreen(agent.deskTile.x, agent.deskTile.y);
+    const laptop = this.add.image(
+      Math.round(deskScreen.x),
+      Math.round(deskScreen.y + this.tileHeight / 2 - 2),
+      'fyso-laptop',
+    );
+    laptop.setScale(this.nanoScale);
+    laptop.setOrigin(0.5, 0.5);
+    laptop.setDepth(agent.deskTile.y + agent.deskTile.x + 0.6);
+    agent.laptopImage = laptop;
+  }
+
+  /** Reverse of sitDown: restore the idle pose and remove the laptop. */
+  private standUp(agent: AgentState): void {
+    if (!agent.isSeated) return;
+    agent.isSeated = false;
+
+    const spriteKey = agent.def.sprite;
+    agent.sprite.y -= SIT_Y_OFFSET * this.charScale;
+    agent.sprite.play(`${spriteKey}-idle-south`);
+
+    agent.laptopImage?.destroy();
+    agent.laptopImage = undefined;
   }
 
   // ── Animations ────────────────────────────────────────────────
@@ -506,6 +709,20 @@ export class FysoTeamsScene extends Phaser.Scene {
           repeat: 0,
         });
       }
+    }
+
+    // Sit (typing) animation — south-facing only. Uses the type_0/type_1
+    // frames from the spritesheet so the character looks like they're
+    // working at a laptop.
+    const sitKey = `${spriteKey}-sit-south`;
+    if (!this.anims.exists(sitKey)) {
+      const sitRow = DIR_SOUTH; // south-facing row
+      this.anims.create({
+        key: sitKey,
+        frames: SIT_FRAMES.map((col) => ({ key: spriteKey, frame: sitRow * SPRITE_COLS + col })),
+        frameRate: Math.round(1000 / (FRAME_DURATION_MS * 2)),
+        repeat: -1,
+      });
     }
   }
 
@@ -677,6 +894,10 @@ export class FysoTeamsScene extends Phaser.Scene {
     agent: AgentState,
     path: Array<{ x: number; y: number }>,
   ): void {
+    // Guard against the agent being removed mid-tween — its game objects
+    // would already be destroyed.
+    if (!this.agents.has(agent.def.id)) return;
+
     if (path.length === 0) {
       agent.isMoving = false;
       const spriteKey = agent.def.sprite;
@@ -684,6 +905,20 @@ export class FysoTeamsScene extends Phaser.Scene {
       const prevStatus =
         agent.status === 'walking' ? agent.baseStatus : agent.status;
       this.setAgentStatus(agent.def.id, prevStatus);
+      // If the agent finished walking while in the working base status,
+      // either sit down (if they arrived at the chair) or walk back to the
+      // chair. setAgentStatus doesn't trigger enterWorkingState when the
+      // base is already 'working', so we handle the follow-up here.
+      if (agent.baseStatus === 'working') {
+        const atChair =
+          agent.currentX === agent.chairTile.x &&
+          agent.currentY === agent.chairTile.y;
+        if (atChair) {
+          this.sitDown(agent);
+        } else {
+          this.moveAgent(agent.def.id, agent.chairTile.x, agent.chairTile.y);
+        }
+      }
       return;
     }
 
@@ -722,6 +957,7 @@ export class FysoTeamsScene extends Phaser.Scene {
         this.drawBadge(agent.badge, Math.round(tweenTarget.x), labelY - 10, agent.status);
       },
       onComplete: () => {
+        if (!this.agents.has(agent.def.id)) return;
         agent.currentX = next.x;
         agent.currentY = next.y;
         const newDepth = agent.currentY + agent.currentX;
